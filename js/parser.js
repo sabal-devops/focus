@@ -152,6 +152,14 @@ function looksLikePurchase(text) {
   return hasFoodWord || hasProduct;
 }
 
+const DAY_NAMES = /\b(?:luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|oggi|domani|dopodomani)\b/i;
+const EVENT_WORDS = /\b(?:pago|costa|costo|spendo|dentista|medico|dottore|psicologo|fisioterapista|oculista|appuntamento|visita|riunione|meeting|palestra|allenamento)\b/i;
+
+function looksLikeEvent(text) {
+  const norm = normalize(text);
+  return DAY_NAMES.test(norm) || EVENT_WORDS.test(norm);
+}
+
 const PATTERNS = [
   {
     name: 'acquisto_con_spesa',
@@ -288,6 +296,8 @@ const PATTERNS = [
       const name = cleanProductName(product);
       if (!name || name.length < 2) return null;
 
+      if (looksLikeEvent(name)) return null;
+
       const normName = normalize(name);
       const words = normName.split(/\s+/);
       const isFoodOrProduct = words.some(w => FOOD_WORDS.has(w)) || name.length >= 3;
@@ -312,6 +322,7 @@ const PATTERNS = [
       const amount = italianToNumber(m[3]);
       const name = cleanProductName(product);
       if (!name || name.length < 2 || !amount) return null;
+      if (looksLikeEvent(name)) return null;
 
       await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
       await addOrUpdateDispensa(name, qty);
