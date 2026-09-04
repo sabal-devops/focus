@@ -1,4 +1,4 @@
-const CACHE_NAME = 'focus-v8';
+const CACHE_NAME = 'focus-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   './js/views/dispensa.js',
   './js/views/finanze.js',
   './js/views/settings.js',
+  './js/notifications.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -41,6 +42,19 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(cls => {
+      if (cls.length > 0) {
+        cls[0].focus();
+      } else {
+        clients.openWindow('./');
+      }
+    })
+  );
 });
 
 self.addEventListener('fetch', (event) => {

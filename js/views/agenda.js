@@ -151,13 +151,14 @@ function eventoHTML(evento, passato = false) {
   const ora = evento.ora || '';
   const icons = { appuntamento: '🏥', lavoro: '💼', personale: '👤', sport: '🏃', altro: '📌' };
   const icon = icons[evento.tipo] || '📌';
+  const costo = evento.costo ? `€${evento.costo.toFixed(2)}` : '';
 
   return `
     <div class="list-item${passato ? ' checked' : ''}" data-id="${evento.id}" data-store="eventi">
       <div style="font-size:20px">${icon}</div>
       <div class="item-text">
         <div class="item-title">${evento.titolo}</div>
-        <div class="item-subtitle">${giorno}${ora ? ' · ' + ora : ''}${evento.luogo ? ' · ' + evento.luogo : ''}</div>
+        <div class="item-subtitle">${giorno}${ora ? ' · ' + ora : ''}${evento.luogo ? ' · ' + evento.luogo : ''}${costo ? ' · <span style="color:var(--danger);font-weight:600">' + costo + '</span>' : ''}</div>
       </div>
       <button class="btn btn-ghost btn-icon delete-btn" data-id="${evento.id}" data-store="eventi" style="font-size:16px;color:var(--text-muted)">✕</button>
     </div>
@@ -181,13 +182,14 @@ function scadenzaHTML(scadenza, now) {
 
   const catIcons = { documento: '📄', veicolo: '🚗', casa: '🏠', salute: '🏥', abbonamento: '📱', altro: '📋' };
   const icon = catIcons[scadenza.categoria] || '📋';
+  const costo = scadenza.costo ? `€${scadenza.costo.toFixed(2)}` : '';
 
   return `
     <div class="list-item${scadenza.completata ? ' checked' : ''}" data-id="${scadenza.id}" data-store="scadenze">
       <div class="check" data-id="${scadenza.id}" data-store="scadenze"></div>
       <div class="item-text">
         <div class="item-title">${icon} ${scadenza.titolo}</div>
-        <div class="item-subtitle">${giorno}${urgency ? ` · <span style="color:${urgencyColor};font-weight:600">${urgency}</span>` : ''}</div>
+        <div class="item-subtitle">${giorno}${urgency ? ` · <span style="color:${urgencyColor};font-weight:600">${urgency}</span>` : ''}${costo ? ' · <span style="color:var(--danger)">' + costo + '</span>' : ''}</div>
         ${scadenza.descrizione ? `<div class="item-subtitle">${scadenza.descrizione}</div>` : ''}
       </div>
       <button class="btn btn-ghost btn-icon delete-btn" data-id="${scadenza.id}" data-store="scadenze" style="font-size:16px;color:var(--text-muted)">✕</button>
@@ -251,6 +253,10 @@ async function editEvento(id) {
         <input type="text" name="luogo" class="input-field" value="${evento.luogo || ''}">
       </div>
       <div class="form-group">
+        <label class="form-label">Costo (€, opzionale)</label>
+        <input type="number" step="0.01" name="costo" class="input-field" value="${evento.costo || ''}" placeholder="0.00">
+      </div>
+      <div class="form-group">
         <label class="form-label">Tipo</label>
         <select name="tipo" class="input-field">
           ${['appuntamento', 'lavoro', 'personale', 'sport', 'altro'].map(t =>
@@ -261,12 +267,26 @@ async function editEvento(id) {
       <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm)">Salva</button>
     </form>
   `, async (data) => {
+    const newCosto = data.costo ? parseFloat(data.costo) : null;
+    const oldCosto = evento.costo || null;
+
     evento.titolo = data.titolo;
     evento.data = data.data;
     evento.ora = data.ora || null;
     evento.luogo = data.luogo || null;
     evento.tipo = data.tipo;
+    evento.costo = newCosto;
     await db.put('eventi', evento);
+
+    if (newCosto && newCosto !== oldCosto) {
+      await db.add('transazioni', {
+        importo: newCosto, tipo: 'uscita',
+        categoria: guessEventCategory(evento.titolo),
+        descrizione: evento.titolo,
+        data: new Date(evento.data).toISOString()
+      });
+    }
+
     loadContent();
   });
 }
@@ -292,6 +312,10 @@ function openAddEvento() {
         <input type="text" name="luogo" class="input-field" placeholder="Es. Via Roma 10">
       </div>
       <div class="form-group">
+        <label class="form-label">Costo (€, opzionale)</label>
+        <input type="number" step="0.01" name="costo" class="input-field" placeholder="0.00">
+      </div>
+      <div class="form-group">
         <label class="form-label">Tipo</label>
         <select name="tipo" class="input-field">
           <option value="appuntamento">Appuntamento</option>
@@ -304,14 +328,26 @@ function openAddEvento() {
       <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm)">Aggiungi</button>
     </form>
   `, async (data) => {
+    const costo = data.costo ? parseFloat(data.costo) : null;
     await db.add('eventi', {
       titolo: data.titolo,
       data: data.data,
       ora: data.ora || null,
       luogo: data.luogo || null,
       tipo: data.tipo,
+      costo: costo,
       note: null
     });
+
+    if (costo) {
+      await db.add('transazioni', {
+        importo: costo, tipo: 'uscita',
+        categoria: guessEventCategory(data.titolo),
+        descrizione: data.titolo,
+        data: new Date(data.data).toISOString()
+      });
+    }
+
     loadContent();
   });
 }
@@ -339,19 +375,43 @@ function openAddScadenza() {
         </select>
       </div>
       <div class="form-group">
+        <label class="form-label">Costo (€, opzionale)</label>
+        <input type="number" step="0.01" name="costo" class="input-field" placeholder="0.00">
+      </div>
+      <div class="form-group">
         <label class="form-label">Note (opzionale)</label>
         <input type="text" name="descrizione" class="input-field" placeholder="Es. Portare fototessera">
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm)">Aggiungi</button>
     </form>
   `, async (data) => {
+    const costo = data.costo ? parseFloat(data.costo) : null;
     await db.add('scadenze', {
       titolo: data.titolo,
       data: data.data,
       descrizione: data.descrizione || null,
       categoria: data.categoria,
+      costo: costo,
       completata: false
     });
+
+    if (costo) {
+      await db.add('transazioni', {
+        importo: costo, tipo: 'uscita',
+        categoria: 'Altro',
+        descrizione: `Scadenza: ${data.titolo}`,
+        data: new Date(data.data).toISOString()
+      });
+    }
+
     loadContent();
   });
+}
+
+function guessEventCategory(titolo) {
+  const norm = titolo.toLowerCase();
+  if (/dentista|medico|psicologo|fisioterapista|oculista|visita|ospedale/.test(norm)) return 'Salute';
+  if (/palestra|sport|allenamento/.test(norm)) return 'Svago';
+  if (/riunione|meeting|ufficio|lavoro/.test(norm)) return 'Altro';
+  return 'Altro';
 }

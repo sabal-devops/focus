@@ -2,7 +2,7 @@ import { open } from './db.js';
 import { register, init as initRouter } from './router.js';
 import { render as renderNavbar } from './components/navbar.js';
 
-const V = '?v=8';
+const V = '?v=9';
 
 async function boot() {
   await open();
@@ -30,6 +30,10 @@ async function boot() {
   window.addEventListener('hashchange', () => renderNavbar(navbar));
 
   initRouter();
+
+  const { requestPermission, startPeriodicCheck } = await import('./notifications.js' + V);
+  const granted = await requestPermission();
+  if (granted) startPeriodicCheck();
 }
 
 if ('serviceWorker' in navigator) {

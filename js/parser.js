@@ -11,13 +11,14 @@ const CATEGORY_MAP = {
   'affitto': 'Casa', 'bolletta': 'Casa', 'luce': 'Casa', 'gas': 'Casa', 'acqua': 'Casa',
   'netflix': 'Abbonamenti', 'spotify': 'Abbonamenti', 'abbonamento': 'Abbonamenti',
   'palestra': 'Salute', 'farmacia': 'Salute', 'medico': 'Salute', 'dentista': 'Salute',
+  'psicologo': 'Salute', 'fisioterapista': 'Salute', 'oculista': 'Salute', 'dermatologo': 'Salute',
   'cinema': 'Svago', 'concerto': 'Svago', 'teatro': 'Svago', 'gioco': 'Svago',
 };
 
 const FOOD_WORDS = new Set([
   'pane', 'latte', 'acqua', 'pasta', 'riso', 'pollo', 'carne', 'pesce', 'uova', 'uovo',
   'formaggio', 'mozzarella', 'prosciutto', 'salame', 'burro', 'olio', 'sale', 'zucchero',
-  'farina', 'biscotti', 'cereali', 'yogurt', 'frutta', 'verdura', 'insalata',
+  'farina', 'biscotti', 'biscotto', 'cereali', 'yogurt', 'frutta', 'verdura', 'insalata',
   'pomodori', 'pomodoro', 'patate', 'patata', 'cipolle', 'cipolla', 'aglio',
   'carote', 'carota', 'zucchine', 'zucchina', 'melanzane', 'melanzana', 'peperoni', 'peperone',
   'banane', 'banana', 'mele', 'mela', 'arance', 'arancia', 'limoni', 'limone',
@@ -30,6 +31,22 @@ const FOOD_WORDS = new Set([
   'detersivo', 'sapone', 'shampoo', 'carta', 'scottex', 'fazzoletti', 'pannolini',
   'tovaglioli', 'spugna', 'candeggina', 'ammorbidente',
 ]);
+
+const ITALIAN_NUMBERS = {
+  'un': 1, 'uno': 1, 'una': 1, 'due': 2, 'tre': 3, 'quattro': 4,
+  'cinque': 5, 'sei': 6, 'sette': 7, 'otto': 8, 'nove': 9, 'dieci': 10,
+  'undici': 11, 'dodici': 12, 'tredici': 13, 'quattordici': 14, 'quindici': 15,
+  'sedici': 16, 'diciassette': 17, 'diciotto': 18, 'diciannove': 19, 'venti': 20,
+  'trenta': 30, 'quaranta': 40, 'cinquanta': 50, 'cento': 100, 'mille': 1000,
+  'mezzo': 0.5, 'mezza': 0.5
+};
+
+function italianToNumber(word) {
+  if (!word) return null;
+  const n = parseFloat(word.replace(',', '.'));
+  if (!isNaN(n)) return n;
+  return ITALIAN_NUMBERS[word.toLowerCase()] || null;
+}
 
 function normalize(text) {
   return text.toLowerCase()
@@ -50,12 +67,36 @@ function extractAmount(text) {
     const m = text.match(p);
     if (m) return parseFloat(m[1].replace(',', '.'));
   }
+  const italianNumPattern = /(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(?:euro|€)/i;
+  const im = text.match(italianNumPattern);
+  if (im) return italianToNumber(im[1]);
   return null;
+}
+
+function extractQuantityAndName(text) {
+  const trimmed = text.trim();
+  const numMatch = trimmed.match(/^(\d+)\s+(.+)$/);
+  if (numMatch) return { qty: parseInt(numMatch[1]), name: numMatch[2].trim() };
+
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 2 && ITALIAN_NUMBERS[words[0].toLowerCase()]) {
+    return { qty: ITALIAN_NUMBERS[words[0].toLowerCase()], name: words.slice(1).join(' ') };
+  }
+
+  return { qty: null, name: trimmed };
+}
+
+function matchesProduct(nameA, nameB) {
+  const a = normalize(nameA);
+  const b = normalize(nameB);
+  if (a === b) return true;
+  const rootA = a.replace(/[ei]$/, '').replace(/he$/, '');
+  const rootB = b.replace(/[ei]$/, '').replace(/he$/, '');
+  return rootA.length >= 3 && rootA === rootB;
 }
 
 function cleanProductName(name) {
   return name
-    .replace(/^\d+\s*/, '')
     .replace(/\b(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -65,10 +106,11 @@ function extractSmartProducts(text) {
   let cleaned = text
     .replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '')
     .replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '')
+    .replace(/\b(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(?:euro|€)/gi, '')
     .replace(/\bho\s+(?:comprato|preso|acquistato|speso)\b/gi, '')
     .replace(/\b(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
     .replace(/\b(?:per|a|da|al|alla|dal|dalla|allo|dello|della|nel|nella)\s*$/gi, '')
-    .replace(/\b(?:per|a|da)\s+\d/gi, '')
+    .replace(/\b(?:per|a|da)\s+$/gi, '')
     .trim();
 
   if (!cleaned) return [];
@@ -95,12 +137,17 @@ function guessCategory(text) {
 
 function looksLikePurchase(text) {
   const norm = normalize(text);
-  const hasPrice = /\d+[.,]?\d*\s*(?:euro|€)/i.test(norm) || /(?:euro|€)\s*\d+[.,]?\d*/i.test(norm);
+  const hasPrice = extractAmount(text) !== null;
   if (!hasPrice) return false;
 
-  const words = norm.replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '').replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '').trim().split(/\s+/);
+  const cleaned = norm
+    .replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '')
+    .replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '')
+    .replace(/\b(?:un[oa]?|due|tre|quattro|cinque)\s+(?:euro|€)/gi, '')
+    .trim();
+  const words = cleaned.split(/\s+/);
   const hasFoodWord = words.some(w => FOOD_WORDS.has(w));
-  const hasProduct = words.filter(w => w.length > 2 && !/^(per|che|con|del|della|dei|delle|gli|nel|nella|sul|alla|allo|dal|dalla|uno|una)$/.test(w)).length > 0;
+  const hasProduct = words.filter(w => w.length > 2 && !/^(per|che|con|del|della|dei|delle|gli|nel|nella|sul|alla|allo|dal|dalla|uno|una|ho|hai|ha)$/.test(w)).length > 0;
 
   return hasFoodWord || hasProduct;
 }
@@ -108,29 +155,31 @@ function looksLikePurchase(text) {
 const PATTERNS = [
   {
     name: 'acquisto_con_spesa',
-    match: /ho (?:comprato|preso|acquistato)\s+(.+?)(?:\.\s*|\s+)ho speso\s+(\d+[.,]?\d*)\s*(?:euro|€)/i,
+    match: /ho (?:comprato|preso|acquistato)\s+(.+?)(?:\.\s*|\s+)ho speso\s+(.+?)$/i,
     async handler(m) {
-      const products = extractSmartProducts(m[1]);
-      const amount = parseFloat(m[2].replace(',', '.'));
+      const rawProducts = extractSmartProducts(m[1]);
+      const amount = extractAmount(m[2]);
       const actions = [];
-      const responses = [];
+      const names = [];
 
-      for (const p of products) {
-        const name = cleanProductName(p);
-        if (!name) continue;
-        await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
-        await addOrUpdateDispensa(name, null);
+      for (const p of rawProducts) {
+        const { qty, name } = extractQuantityAndName(cleanProductName(p));
+        if (!name || name.length < 2) continue;
+        await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+        await addOrUpdateDispensa(name, qty);
         actions.push({ type: 'spesa', item: name });
+        names.push(qty ? `${qty} ${name}` : name);
       }
 
-      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: 'Alimentazione', descrizione: `Acquisto: ${products.map(cleanProductName).join(', ')}`, data: new Date().toISOString() });
-      actions.push({ type: 'transazione', amount });
+      if (amount) {
+        await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: 'Alimentazione', descrizione: `Acquisto: ${names.join(', ')}`, data: new Date().toISOString() });
+        actions.push({ type: 'transazione', amount });
+      }
 
-      const names = products.map(cleanProductName).filter(Boolean);
-      responses.push(`Ho registrato ${names.join(', ')} nella spesa e dispensa.`);
-      responses.push(`Spesa di €${amount.toFixed(2)} registrata.`);
-
-      return { actions, response: responses.join(' ') };
+      const parts = [];
+      if (names.length > 0) parts.push(`Registrato: ${names.join(', ')}`);
+      if (amount) parts.push(`€${amount.toFixed(2)} in uscite`);
+      return { actions, response: parts.join(' — ') + '.' };
     }
   },
   {
@@ -138,31 +187,31 @@ const PATTERNS = [
     match: /ho (?:comprato|preso|acquistato)\s+(.+)/i,
     async handler(m) {
       const fullText = m[1];
-      const products = extractSmartProducts(fullText);
+      const rawProducts = extractSmartProducts(fullText);
       const amount = extractAmount(fullText);
       const actions = [];
-      const responses = [];
+      const names = [];
 
-      for (const p of products) {
-        const name = cleanProductName(p);
-        if (!name) continue;
-        await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
-        await addOrUpdateDispensa(name, null);
+      for (const p of rawProducts) {
+        const { qty, name } = extractQuantityAndName(cleanProductName(p));
+        if (!name || name.length < 2) continue;
+        await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+        await addOrUpdateDispensa(name, qty);
         actions.push({ type: 'spesa', item: name });
+        names.push(qty ? `${qty} ${name}` : name);
       }
 
-      const names = products.map(cleanProductName).filter(Boolean);
       if (names.length > 0) {
-        responses.push(`Ho registrato: ${names.join(', ')}.`);
+        if (amount) {
+          await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(fullText), descrizione: `Acquisto: ${names.join(', ')}`, data: new Date().toISOString() });
+          actions.push({ type: 'transazione', amount });
+        }
       }
 
-      if (amount) {
-        await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(fullText), descrizione: `Acquisto: ${names.join(', ')}`, data: new Date().toISOString() });
-        actions.push({ type: 'transazione', amount });
-        responses.push(`Spesa di €${amount.toFixed(2)} registrata.`);
-      }
-
-      return { actions, response: responses.join(' ') || 'Ho capito, ma non ho trovato prodotti specifici.' };
+      const parts = [];
+      if (names.length > 0) parts.push(`Registrato: ${names.join(', ')}`);
+      if (amount) parts.push(`€${amount.toFixed(2)} in uscite`);
+      return { actions, response: parts.join(' — ') + '.' || 'Ho capito, ma non ho trovato prodotti specifici.' };
     }
   },
   {
@@ -211,17 +260,16 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_comprato_passivo',
-    match: /^(\d+\s+)?(.+?)\s+(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\s+(?:a|per)\s+(\d+[.,]?\d*)\s*(?:euro|€)?$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(?:euro|€)?\s*$/i,
     async handler(m) {
-      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
-      const amount = parseFloat(m[3].replace(',', '.'));
+      const amount = italianToNumber(m[3]);
       const name = cleanProductName(product);
-      if (!name) return null;
+      if (!name || !amount) return null;
 
       await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
       await addOrUpdateDispensa(name, qty);
-
       await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
 
       return {
@@ -232,24 +280,21 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_con_prezzo',
-    match: /^(\d+\s+)?(.+?)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
     async handler(m) {
-      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
       const amount = parseFloat(m[3].replace(',', '.'));
-
       const name = cleanProductName(product);
       if (!name || name.length < 2) return null;
 
       const normName = normalize(name);
       const words = normName.split(/\s+/);
       const isFoodOrProduct = words.some(w => FOOD_WORDS.has(w)) || name.length >= 3;
-
       if (!isFoodOrProduct) return null;
 
       await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
       await addOrUpdateDispensa(name, qty);
-
       await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
 
       return {
@@ -260,18 +305,16 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_a_prezzo',
-    match: /^(\d+\s+)?(.+?)\s+(?:a|per)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(?:euro|€)\s*$/i,
     async handler(m) {
-      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
-      const amount = parseFloat(m[3].replace(',', '.'));
-
+      const amount = italianToNumber(m[3]);
       const name = cleanProductName(product);
-      if (!name || name.length < 2) return null;
+      if (!name || name.length < 2 || !amount) return null;
 
       await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
       await addOrUpdateDispensa(name, qty);
-
       await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
 
       return {
@@ -305,23 +348,27 @@ const PATTERNS = [
     name: 'aggiungi_spesa',
     match: /(?:compra|devo comprare|aggiungi|metti|serve|servono|mi serve|mi servono)\s+(.+?)(?:\s+alla\s+(?:lista|spesa))?$/i,
     async handler(m) {
-      const products = m[1].split(/\s*[,]\s+|\s+e\s+/).map(s => s.trim()).filter(s => s.length > 1);
-      for (const p of products) {
-        await db.add('spesa', { nome: p, quantita: null, unita: null, completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null });
+      const raw = m[1].split(/\s*[,]\s+|\s+e\s+/).map(s => s.trim()).filter(s => s.length > 1);
+      const names = [];
+      for (const item of raw) {
+        const { qty, name } = extractQuantityAndName(item);
+        if (!name) continue;
+        await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null });
+        names.push(qty ? `${qty} ${name}` : name);
       }
       return {
-        actions: products.map(p => ({ type: 'spesa_add', item: p })),
-        response: `Aggiunto alla spesa: ${products.join(', ')}.`
+        actions: names.map(p => ({ type: 'spesa_add', item: p })),
+        response: `Aggiunto alla spesa: ${names.join(', ')}.`
       };
     }
   },
   {
     name: 'finito',
-    match: /(?:ho finito|e' finit[oa]|è finit[oa]|finit[oa]|non ho piu'?|non ho più)\s+(?:il |la |lo |l'|le |i |gli )?(.+)/i,
+    match: /(?:ho finito|e' finit[oa]|è finit[oa]|finit[oa]|non ho piu'?|non ho più|sono finit[oaie])\s+(?:il |la |lo |l'|le |i |gli )?(.+)/i,
     async handler(m) {
       const product = m[1].trim();
       const items = await db.getAll('dispensa');
-      const found = items.find(i => normalize(i.nome) === normalize(product));
+      const found = items.find(i => matchesProduct(i.nome, product));
       if (found) {
         found.quantita = 0;
         await db.put('dispensa', found);
@@ -329,7 +376,7 @@ const PATTERNS = [
       await db.add('spesa', { nome: product, quantita: null, unita: null, completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null });
       return {
         actions: [{ type: 'dispensa_update', item: product }, { type: 'spesa_add', item: product }],
-        response: `${product} segnato come terminato e aggiunto alla lista della spesa.`
+        response: `${product} segnato come terminato${found ? ' nella dispensa' : ''} e aggiunto alla lista della spesa.`
       };
     }
   },
@@ -395,7 +442,7 @@ const PATTERNS = [
       const list = items.map(i => {
         const q = i.quantita;
         const status = q === 0 ? ' (terminato)' : q !== null && q <= 1 ? ' (quasi finito)' : '';
-        return `${i.nome}${status}`;
+        return `${i.nome}${q !== null && q > 0 ? ` (${q})` : ''}${status}`;
       }).join(', ');
       return { actions: [], response: `In dispensa hai: ${list}.` };
     }
@@ -409,8 +456,106 @@ const PATTERNS = [
       if (daComprare.length === 0) {
         return { actions: [], response: 'La lista della spesa è vuota. Tutto a posto!' };
       }
-      const list = daComprare.map(i => i.nome).join(', ');
+      const list = daComprare.map(i => {
+        return i.quantita ? `${i.quantita} ${i.nome}` : i.nome;
+      }).join(', ');
       return { actions: [], response: `Da comprare: ${list} (${daComprare.length} prodotti).` };
+    }
+  },
+  {
+    name: 'evento_con_data_e_prezzo',
+    match: /(?:(?:il\s+)?(?:giorno\s+)?)?(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s*(\d{4})?\s+(?:ho |c'e' |c'è |devo andare |vado )?\s*(?:un |una |il |la |lo |l'|al |alla |dal |dalla |dallo |dall')?(.+?)(?:\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?))?(?:\s+(?:e )?(?:pago|costa|costo|spendo|spesa di|prezzo)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento)\s*(?:euro|€))?$/i,
+    async handler(m) {
+      const giorno = parseInt(m[1]);
+      const mese = parseItalianMonth(m[2]);
+      const anno = m[3] ? parseInt(m[3]) : new Date().getFullYear();
+      let titolo = m[4].trim();
+      const ora = m[5] ? m[5].replace('.', ':') : null;
+      const costoRaw = m[6] || null;
+      const costo = costoRaw ? italianToNumber(costoRaw) : null;
+
+      titolo = titolo
+        .replace(/\s+(?:e )?(?:pago|costa|costo|spendo).*$/i, '')
+        .replace(/\s+alle?\s*$/i, '')
+        .trim();
+
+      if (!titolo || mese === null) return null;
+
+      const data = new Date(anno, mese, giorno);
+      const evento = {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        ora: ora || null,
+        luogo: null,
+        tipo: guessEventType(titolo),
+        costo: costo || null,
+        note: null
+      };
+      await db.add('eventi', evento);
+
+      if (costo) {
+        await db.add('transazioni', {
+          importo: costo, tipo: 'uscita',
+          categoria: guessCategory(titolo),
+          descrizione: titolo,
+          data: data.toISOString()
+        });
+      }
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: anno !== new Date().getFullYear() ? 'numeric' : undefined });
+      const parts = [`Segnato: "${titolo}" — ${giornoStr}`];
+      if (ora) parts[0] += ` alle ${ora}`;
+      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata.`);
+
+      return {
+        actions: [{ type: 'evento', item: titolo }],
+        response: parts.join('. ') + '.'
+      };
+    }
+  },
+  {
+    name: 'evento_giorno_settimana_prezzo',
+    match: /(?:ho|c'e'|c'è|devo andare|vado)\s+(?:il |la |lo |l'|un |una |al |alla |dal |dalla |dallo |dall')?([\w\s]+?)\s+(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|oggi|domani|dopodomani)(?:\s+alle?\s+(\d{1,2}(?:[:.]\d{2})?))?(?:\s+(?:e )?(?:pago|costa|costo|spendo|prezzo)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento)\s*(?:euro|€))?$/i,
+    async handler(m) {
+      let titolo = m[1].trim();
+      const giorno = m[2].trim();
+      const ora = m[3] ? m[3].replace('.', ':') : null;
+      const costoRaw = m[4] || null;
+      const costo = costoRaw ? italianToNumber(costoRaw) : null;
+
+      titolo = titolo.replace(/\s+(?:e )?(?:pago|costa|costo|spendo).*$/i, '').trim();
+      const data = parseItalianDate(giorno);
+      if (!data || !titolo) return null;
+
+      const evento = {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        ora: ora || null,
+        luogo: null,
+        tipo: guessEventType(titolo),
+        costo: costo || null,
+        note: null
+      };
+      await db.add('eventi', evento);
+
+      if (costo) {
+        await db.add('transazioni', {
+          importo: costo, tipo: 'uscita',
+          categoria: guessCategory(titolo),
+          descrizione: titolo,
+          data: data.toISOString()
+        });
+      }
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      const parts = [`Segnato: "${titolo}" — ${giornoStr}`];
+      if (ora) parts[0] += ` alle ${ora}`;
+      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata.`);
+
+      return {
+        actions: [{ type: 'evento', item: titolo }],
+        response: parts.join('. ') + '.'
+      };
     }
   },
   {
@@ -430,6 +575,7 @@ const PATTERNS = [
         ora: ora || null,
         luogo: null,
         tipo: guessEventType(titolo),
+        costo: null,
         note: null
       });
 
@@ -457,6 +603,7 @@ const PATTERNS = [
         ora: ora || null,
         luogo: null,
         tipo: guessEventType(titolo),
+        costo: null,
         note: null
       });
 
@@ -483,6 +630,7 @@ const PATTERNS = [
         data: data.toISOString().slice(0, 10),
         descrizione: null,
         categoria: guessScadenzaCategory(titolo),
+        costo: null,
         completata: false
       });
 
@@ -542,7 +690,7 @@ function parseItalianDate(text) {
 
 function guessEventType(titolo) {
   const norm = normalize(titolo);
-  if (/dentista|medico|dottore|visita|ospedale|esame/.test(norm)) return 'appuntamento';
+  if (/dentista|medico|dottore|visita|ospedale|esame|psicologo|fisioterapista|oculista/.test(norm)) return 'appuntamento';
   if (/riunione|meeting|call|colloquio|ufficio/.test(norm)) return 'lavoro';
   if (/palestra|corsa|allenamento|partita|calcio|nuoto/.test(norm)) return 'sport';
   return 'personale';
@@ -560,7 +708,7 @@ function guessScadenzaCategory(titolo) {
 
 async function addOrUpdateDispensa(nome, quantita) {
   const items = await db.getAll('dispensa');
-  const found = items.find(i => normalize(i.nome) === normalize(nome));
+  const found = items.find(i => matchesProduct(i.nome, nome));
   if (found) {
     found.ultimoAcquisto = new Date().toISOString();
     if (quantita !== null) found.quantita = (found.quantita || 0) + quantita;
@@ -591,13 +739,16 @@ export async function parseMessage(text) {
   if (looksLikePurchase(text)) {
     const amount = extractAmount(text);
     const products = extractSmartProducts(text);
-    const names = products.map(cleanProductName).filter(p => p && p.length >= 2);
     const actions = [];
+    const names = [];
 
-    for (const name of names) {
-      await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
-      await addOrUpdateDispensa(name, null);
+    for (const p of products) {
+      const { qty, name } = extractQuantityAndName(cleanProductName(p));
+      if (!name || name.length < 2) continue;
+      await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(name, qty);
       actions.push({ type: 'spesa', item: name });
+      names.push(qty ? `${qty} ${name}` : name);
     }
 
     if (amount) {
@@ -615,6 +766,6 @@ export async function parseMessage(text) {
 
   return {
     actions: [],
-    response: 'Non ho capito. Prova con: "latte 2 euro", "ho comprato pane", "compra uova", "ho speso 30 euro al supermercato", "ho il dentista giovedì".'
+    response: 'Non ho capito. Prova con: "latte 2 euro", "ho comprato pane", "compra uova", "ho speso 30 euro al supermercato", "ho il dentista giovedì pago 80 euro".'
   };
 }
