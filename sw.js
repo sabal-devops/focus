@@ -1,4 +1,4 @@
-const CACHE_NAME = 'focus-v2';
+const CACHE_NAME = 'focus-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,8 @@ const ASSETS = [
   './js/components/modal.js',
   './js/views/home.js',
   './js/views/chat.js',
+  './js/views/agenda.js',
+  './js/views/altro.js',
   './js/views/spesa.js',
   './js/views/dispensa.js',
   './js/views/finanze.js',

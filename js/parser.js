@@ -250,6 +250,86 @@ const PATTERNS = [
     }
   },
   {
+    name: 'evento',
+    match: /(?:ho|c'e'|c'è|devo andare|vado)\s+(?:il |la |lo |l'|un |una |)?([\w\s]+?)(?:\s+(?:il giorno|il|di|del|della)\s+)?(\w+(?:\s+\w+)?)\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?)?/i,
+    async handler(m, originalText) {
+      const titolo = m[1].trim();
+      const when = m[2] ? m[2].trim() : '';
+      const ora = m[3] ? m[3].replace('.', ':') : null;
+
+      const data = parseItalianDate(when);
+      if (!data) return null;
+
+      await db.add('eventi', {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        ora: ora || null,
+        luogo: null,
+        tipo: guessEventType(titolo),
+        note: null
+      });
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      return {
+        actions: [{ type: 'evento', item: titolo }],
+        response: `Evento registrato: "${titolo}" per ${giornoStr}${ora ? ' alle ' + ora : ''}.`
+      };
+    }
+  },
+  {
+    name: 'evento_semplice',
+    match: /(?:ho|c'e'|c'è)\s+(?:il |la |lo |l'|un |una |)?([\w\s]+?)\s+(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|oggi|domani|dopodomani)(?:\s+alle?\s+(\d{1,2}(?:[:.]\d{2})?))?/i,
+    async handler(m) {
+      const titolo = m[1].trim();
+      const giorno = m[2].trim();
+      const ora = m[3] ? m[3].replace('.', ':') : null;
+
+      const data = parseItalianDate(giorno);
+      if (!data) return null;
+
+      await db.add('eventi', {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        ora: ora || null,
+        luogo: null,
+        tipo: guessEventType(titolo),
+        note: null
+      });
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      return {
+        actions: [{ type: 'evento', item: titolo }],
+        response: `Segnato: "${titolo}" — ${giornoStr}${ora ? ' alle ' + ora : ''}.`
+      };
+    }
+  },
+  {
+    name: 'scadenza',
+    match: /(?:scade|scadenza|rinnov[oa]|da rinnovare)\s+(?:il |la |lo |l'|del |della )?([\w\s]+?)(?:\s+(?:il|il giorno|entro il|entro)\s+)?(\d{1,2})\s*(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s*(\d{4})?/i,
+    async handler(m) {
+      const titolo = m[1].trim();
+      const giorno = parseInt(m[2]);
+      const mese = parseItalianMonth(m[3]);
+      const anno = m[4] ? parseInt(m[4]) : new Date().getFullYear();
+
+      const data = new Date(anno, mese, giorno);
+
+      await db.add('scadenze', {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        descrizione: null,
+        categoria: guessScadenzaCategory(titolo),
+        completata: false
+      });
+
+      const giornoStr = data.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+      return {
+        actions: [{ type: 'scadenza', item: titolo }],
+        response: `Scadenza registrata: "${titolo}" — ${giornoStr}.`
+      };
+    }
+  },
+  {
     name: 'mangiato',
     match: /(?:ho mangiato|a pranzo|a cena|a colazione|per pranzo|per cena|per colazione)\s+(.+)/i,
     async handler(m) {
@@ -261,6 +341,58 @@ const PATTERNS = [
     }
   },
 ];
+
+function parseItalianMonth(name) {
+  const months = { gennaio: 0, febbraio: 1, marzo: 2, aprile: 3, maggio: 4, giugno: 5, luglio: 6, agosto: 7, settembre: 8, ottobre: 9, novembre: 10, dicembre: 11 };
+  return months[normalize(name)] ?? null;
+}
+
+function parseItalianDate(text) {
+  const norm = normalize(text);
+  const now = new Date();
+
+  if (norm === 'oggi') return now;
+  if (norm === 'domani') { now.setDate(now.getDate() + 1); return now; }
+  if (norm === 'dopodomani') { now.setDate(now.getDate() + 2); return now; }
+
+  const days = { lunedi: 1, martedi: 2, mercoledi: 3, giovedi: 4, venerdi: 5, sabato: 6, domenica: 0 };
+  if (days[norm] !== undefined) {
+    const target = days[norm];
+    const current = now.getDay();
+    let diff = target - current;
+    if (diff <= 0) diff += 7;
+    now.setDate(now.getDate() + diff);
+    return now;
+  }
+
+  const dateMatch = norm.match(/(\d{1,2})\s*(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s*(\d{4})?/);
+  if (dateMatch) {
+    const day = parseInt(dateMatch[1]);
+    const month = parseItalianMonth(dateMatch[2]);
+    const year = dateMatch[3] ? parseInt(dateMatch[3]) : now.getFullYear();
+    return new Date(year, month, day);
+  }
+
+  return null;
+}
+
+function guessEventType(titolo) {
+  const norm = normalize(titolo);
+  if (/dentista|medico|dottore|visita|ospedale|esame/.test(norm)) return 'appuntamento';
+  if (/riunione|meeting|call|colloquio|ufficio/.test(norm)) return 'lavoro';
+  if (/palestra|corsa|allenamento|partita|calcio|nuoto/.test(norm)) return 'sport';
+  return 'personale';
+}
+
+function guessScadenzaCategory(titolo) {
+  const norm = normalize(titolo);
+  if (/patente|carta.*identita|passaporto|permesso|tessera/.test(norm)) return 'documento';
+  if (/bollo|assicurazione|revisione|auto|moto/.test(norm)) return 'veicolo';
+  if (/affitto|bolletta|mutuo|condominio/.test(norm)) return 'casa';
+  if (/visita|vaccino|ricetta|farmaco/.test(norm)) return 'salute';
+  if (/abbonamento|netflix|spotify|palestra/.test(norm)) return 'abbonamento';
+  return 'altro';
+}
 
 async function addOrUpdateDispensa(nome, quantita) {
   const items = await db.getAll('dispensa');
@@ -293,6 +425,6 @@ export async function parseMessage(text) {
 
   return {
     actions: [],
-    response: 'Ho capito, ma non ho riconosciuto un\'azione specifica. Prova con frasi come "ho comprato...", "ho speso...", "compra...".'
+    response: 'Non ho riconosciuto un\'azione. Prova: "ho comprato...", "ho speso...", "compra...", "ho il dentista giovedì", "la patente scade il 15 marzo 2027".'
   };
 }

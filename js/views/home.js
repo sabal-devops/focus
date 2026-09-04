@@ -55,12 +55,24 @@ async function loadDashboard() {
   const spesaItems = await db.getAll('spesa');
   const dispensaItems = await db.getAll('dispensa');
   const transazioni = await db.getAll('transazioni');
+  const eventi = await db.getAll('eventi');
+  const scadenze = await db.getAll('scadenze');
 
   const daComprare = spesaItems.filter(i => !i.completato);
   const scorteBasse = dispensaItems.filter(i => i.quantita !== null && i.quantita <= 1);
   const terminati = dispensaItems.filter(i => i.quantita === 0);
 
   const now = new Date();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const prossimiEventi = eventi
+    .filter(e => new Date(e.data) >= today)
+    .sort((a, b) => new Date(a.data) - new Date(b.data))
+    .slice(0, 3);
+
+  const scadenzeUrgenti = scadenze
+    .filter(s => !s.completata && Math.ceil((new Date(s.data) - today) / 86400000) <= 30)
+    .sort((a, b) => new Date(a.data) - new Date(b.data));
   const meseCorrente = transazioni.filter(t => {
     const d = new Date(t.data);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
@@ -102,6 +114,27 @@ async function loadDashboard() {
       text: `${daComprare.length} ${daComprare.length === 1 ? 'prodotto' : 'prodotti'} da comprare`,
       type: 'accent'
     });
+  }
+
+  if (scadenzeUrgenti.length > 0) {
+    const scaduta = scadenzeUrgenti.filter(s => new Date(s.data) < today);
+    const prossime = scadenzeUrgenti.filter(s => new Date(s.data) >= today);
+    if (scaduta.length > 0) {
+      alerts.push({ icon: '⚠️', text: `${scaduta.map(s => s.titolo).join(', ')} — scadenza passata!`, type: 'danger' });
+    }
+    if (prossime.length > 0) {
+      const first = prossime[0];
+      const days = Math.ceil((new Date(first.data) - today) / 86400000);
+      alerts.push({ icon: '📋', text: `${first.titolo} tra ${days} giorni`, type: 'warning' });
+    }
+  }
+
+  if (prossimiEventi.length > 0) {
+    const next = prossimiEventi[0];
+    const d = new Date(next.data);
+    const diff = Math.ceil((d - today) / 86400000);
+    const quando = diff === 0 ? 'oggi' : diff === 1 ? 'domani' : d.toLocaleDateString('it-IT', { weekday: 'long' });
+    alerts.push({ icon: '📅', text: `${next.titolo} — ${quando}${next.ora ? ' alle ' + next.ora : ''}`, type: 'accent' });
   }
 
   if (totalePrecedente > 0 && totaleUscite > totalePrecedente * 1.2) {
