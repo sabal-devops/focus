@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nodo-v3';
+const CACHE_NAME = 'focus-v1';
 const ASSETS = [
   './',
   './index.html',

@@ -35,8 +35,8 @@ export async function render(container) {
 
       <div class="section-title">Info</div>
       <div class="card">
-        <div class="item-subtitle">NODO v0.1.0 — MVP</div>
-        <div class="item-subtitle" style="margin-top:4px">Hub personale intelligente</div>
+        <div class="item-subtitle">Focus v0.1.0</div>
+        <div class="item-subtitle" style="margin-top:4px">Il tuo hub personale intelligente</div>
       </div>
     </div>
   `;

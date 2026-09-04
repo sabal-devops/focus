@@ -1,6 +1,6 @@
 {
-  "name": "NODO",
-  "short_name": "NODO",
+  "name": "Focus",
+  "short_name": "Focus",
   "description": "Il tuo hub personale intelligente",
   "start_url": "./index.html",
   "display": "standalone",

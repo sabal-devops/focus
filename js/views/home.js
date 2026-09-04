@@ -6,7 +6,7 @@ export async function render(container) {
     <div class="view-container">
       <div class="view-header" style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <h1 style="font-size:32px;letter-spacing:-1px">NODO</h1>
+          <h1 style="font-size:32px;letter-spacing:-1px">Focus</h1>
           <p id="home-greeting" style="font-size:var(--font-md);margin-top:6px">Il tuo hub personale</p>
         </div>
         <a href="#/settings" class="btn btn-ghost btn-icon" style="margin-top:4px;background:var(--bg-card);border:1px solid var(--border-light)">
