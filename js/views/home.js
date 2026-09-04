@@ -6,11 +6,11 @@ export async function render(container) {
     <div class="view-container">
       <div class="view-header" style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <h1 style="font-size:32px;letter-spacing:-1px">Focus</h1>
-          <p id="home-greeting" style="font-size:var(--font-md);margin-top:6px">Il tuo hub personale</p>
+          <h1 style="font-size:var(--font-hero)">Focus</h1>
+          <p id="home-greeting" style="font-size:var(--font-md);margin-top:6px;-webkit-text-fill-color:var(--text-secondary)">Il tuo hub personale</p>
         </div>
-        <a href="#/settings" class="btn btn-ghost btn-icon" style="margin-top:4px;background:var(--bg-card);border:1px solid var(--border-light)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <a href="#/settings" class="btn-circle" style="margin-top:8px;background:var(--bg-card);border:1px solid var(--border)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </a>
       </div>
       <div id="home-ai-status"></div>
@@ -59,7 +59,6 @@ async function loadDashboard() {
   const scadenze = await db.getAll('scadenze');
 
   const daComprare = spesaItems.filter(i => !i.completato);
-  const scorteBasse = dispensaItems.filter(i => i.quantita !== null && i.quantita <= 1);
   const terminati = dispensaItems.filter(i => i.quantita === 0);
 
   const now = new Date();
@@ -73,6 +72,7 @@ async function loadDashboard() {
   const scadenzeUrgenti = scadenze
     .filter(s => !s.completata && Math.ceil((new Date(s.data) - today) / 86400000) <= 30)
     .sort((a, b) => new Date(a.data) - new Date(b.data));
+
   const meseCorrente = transazioni.filter(t => {
     const d = new Date(t.data);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
@@ -90,76 +90,61 @@ async function loadDashboard() {
   const alerts = [];
 
   if (terminati.length > 0) {
-    alerts.push({
-      icon: '🔴',
-      text: `${terminati.map(i => i.nome).join(', ')} ${terminati.length === 1 ? 'è terminato' : 'sono terminati'}`,
-      type: 'danger'
-    });
+    alerts.push({ icon: '!', text: `${terminati.map(i => i.nome).join(', ')} ${terminati.length === 1 ? 'terminato' : 'terminati'}`, type: 'danger' });
   }
 
-  if (scorteBasse.length > 0 && scorteBasse.length !== terminati.length) {
-    const quasiFiniti = scorteBasse.filter(i => i.quantita > 0);
-    if (quasiFiniti.length > 0) {
-      alerts.push({
-        icon: '🟡',
-        text: `${quasiFiniti.map(i => i.nome).join(', ')} quasi ${quasiFiniti.length === 1 ? 'finito' : 'finiti'}`,
-        type: 'warning'
-      });
-    }
+  const scorteBasse = dispensaItems.filter(i => i.quantita !== null && i.quantita > 0 && i.quantita <= 1);
+  if (scorteBasse.length > 0) {
+    alerts.push({ icon: '~', text: `${scorteBasse.map(i => i.nome).join(', ')} quasi ${scorteBasse.length === 1 ? 'finito' : 'finiti'}`, type: 'warning' });
   }
 
   if (daComprare.length > 0) {
-    alerts.push({
-      icon: '🛒',
-      text: `${daComprare.length} ${daComprare.length === 1 ? 'prodotto' : 'prodotti'} da comprare`,
-      type: 'accent'
-    });
+    alerts.push({ icon: daComprare.length, text: `prodott${daComprare.length === 1 ? 'o' : 'i'} da comprare`, type: 'accent' });
   }
 
-  if (scadenzeUrgenti.length > 0) {
-    const scaduta = scadenzeUrgenti.filter(s => new Date(s.data) < today);
-    const prossime = scadenzeUrgenti.filter(s => new Date(s.data) >= today);
-    if (scaduta.length > 0) {
-      alerts.push({ icon: '⚠️', text: `${scaduta.map(s => s.titolo).join(', ')} — scadenza passata!`, type: 'danger' });
-    }
-    if (prossime.length > 0) {
-      const first = prossime[0];
-      const days = Math.ceil((new Date(first.data) - today) / 86400000);
-      alerts.push({ icon: '📋', text: `${first.titolo} tra ${days} giorni`, type: 'warning' });
-    }
+  const scaduta = scadenzeUrgenti.filter(s => new Date(s.data) < today);
+  const prossime = scadenzeUrgenti.filter(s => new Date(s.data) >= today);
+  if (scaduta.length > 0) {
+    alerts.push({ icon: '!', text: `${scaduta.map(s => s.titolo).join(', ')} — scaduto!`, type: 'danger' });
+  }
+  if (prossime.length > 0) {
+    const first = prossime[0];
+    const days = Math.ceil((new Date(first.data) - today) / 86400000);
+    alerts.push({ icon: days, text: `${first.titolo} — tra ${days}gg`, type: 'warning' });
   }
 
   if (prossimiEventi.length > 0) {
     const next = prossimiEventi[0];
     const d = new Date(next.data);
     const diff = Math.ceil((d - today) / 86400000);
-    const quando = diff === 0 ? 'oggi' : diff === 1 ? 'domani' : d.toLocaleDateString('it-IT', { weekday: 'long' });
-    alerts.push({ icon: '📅', text: `${next.titolo} — ${quando}${next.ora ? ' alle ' + next.ora : ''}`, type: 'accent' });
+    const quando = diff === 0 ? 'oggi' : diff === 1 ? 'domani' : d.toLocaleDateString('it-IT', { weekday: 'short' });
+    alerts.push({ icon: quando.slice(0, 3), text: `${next.titolo}${next.ora ? ' alle ' + next.ora : ''}`, type: 'accent' });
   }
 
   if (totalePrecedente > 0 && totaleUscite > totalePrecedente * 1.2) {
     const diff = ((totaleUscite / totalePrecedente - 1) * 100).toFixed(0);
-    alerts.push({
-      icon: '📊',
-      text: `Stai spendendo il ${diff}% in più rispetto al mese scorso`,
-      type: 'warning'
-    });
+    alerts.push({ icon: `+${diff}%`, text: `spese vs mese scorso`, type: 'warning' });
   }
+
+  const alertColors = { danger: 'var(--danger)', warning: 'var(--warning)', accent: 'var(--accent)' };
+  const alertBg = { danger: 'var(--danger-soft)', warning: 'var(--warning-soft)', accent: 'var(--accent-soft)' };
 
   if (alerts.length > 0) {
     alertsEl.innerHTML = `
-      <div class="section-title">Attenzione</div>
+      <div class="section-title">Avvisi</div>
       ${alerts.map(a => `
-        <div class="card" style="display:flex;align-items:center;gap:var(--space-md)">
-          <span style="font-size:20px">${a.icon}</span>
-          <span class="item-title" style="font-size:var(--font-sm)">${a.text}</span>
+        <div class="card" style="display:flex;align-items:center;gap:14px;padding:14px var(--space-md)">
+          <div style="width:36px;height:36px;border-radius:10px;background:${alertBg[a.type]};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${alertColors[a.type]};flex-shrink:0">${a.icon}</div>
+          <span style="font-size:var(--font-sm);font-weight:500">${a.text}</span>
         </div>
       `).join('')}
     `;
   } else {
     alertsEl.innerHTML = `
-      <div style="background:linear-gradient(135deg, rgba(139,92,246,0.08), rgba(99,102,241,0.06), rgba(6,182,212,0.08));border-radius:var(--radius-lg);padding:var(--space-xl);text-align:center;margin-bottom:var(--space-md);border:1px solid var(--border-light)">
-        <div style="width:52px;height:52px;border-radius:var(--radius-full);background:linear-gradient(135deg, rgba(99,102,241,0.15), rgba(52,211,153,0.15));display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-md);font-size:22px">✓</div>
+      <div style="background:var(--gradient-card-indigo);border-radius:var(--radius-md);padding:var(--space-xl);text-align:center;margin-bottom:var(--space-md);border:1px solid var(--border)">
+        <div style="width:48px;height:48px;border-radius:var(--radius-full);background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-md)">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
         <div class="item-title" style="font-size:var(--font-lg);margin-bottom:4px">Tutto in ordine</div>
         <div class="item-subtitle">Nessun avviso per ora</div>
       </div>
@@ -170,21 +155,27 @@ async function loadDashboard() {
   const meseCapitalized = mese.charAt(0).toUpperCase() + mese.slice(1);
   summaryEl.innerHTML = `
     <div class="section-title">Riepilogo ${meseCapitalized}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-sm)">
-      <div style="background:linear-gradient(145deg, rgba(139,92,246,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(139,92,246,0.15);box-shadow:var(--shadow-card)">
-        <div style="font-size:18px;margin-bottom:6px">🛒</div>
-        <div style="font-size:var(--font-xl);font-weight:700">${daComprare.length}</div>
-        <div class="item-subtitle" style="font-size:11px">da comprare</div>
+    <div class="stat-grid">
+      <div class="stat-card" style="background:var(--gradient-card-purple)">
+        <div class="stat-icon" style="color:var(--accent)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        </div>
+        <div class="stat-value">${daComprare.length}</div>
+        <div class="stat-label">da comprare</div>
       </div>
-      <div style="background:linear-gradient(145deg, rgba(99,102,241,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(99,102,241,0.15);box-shadow:var(--shadow-card)">
-        <div style="font-size:18px;margin-bottom:6px">💸</div>
-        <div style="font-size:var(--font-xl);font-weight:700;color:var(--danger)">€${totaleUscite.toFixed(0)}</div>
-        <div class="item-subtitle" style="font-size:11px">spese</div>
+      <div class="stat-card" style="background:var(--gradient-card-indigo)">
+        <div class="stat-icon" style="color:var(--danger)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="stat-value" style="color:var(--danger)">€${totaleUscite.toFixed(0)}</div>
+        <div class="stat-label">spese</div>
       </div>
-      <div style="background:linear-gradient(145deg, rgba(6,182,212,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(6,182,212,0.15);box-shadow:var(--shadow-card)">
-        <div style="font-size:18px;margin-bottom:6px">🏠</div>
-        <div style="font-size:var(--font-xl);font-weight:700">${dispensaItems.length}</div>
-        <div class="item-subtitle" style="font-size:11px">in dispensa</div>
+      <div class="stat-card" style="background:var(--gradient-card-cyan)">
+        <div class="stat-icon" style="color:var(--accent-secondary)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <div class="stat-value">${dispensaItems.length}</div>
+        <div class="stat-label">in dispensa</div>
       </div>
     </div>
   `;
@@ -195,14 +186,16 @@ async function loadDashboard() {
       <div class="section-title">Ultime attività</div>
       ${recentTx.map(t => `
         <div class="list-item">
-          <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:${t.tipo === 'uscita' ? 'var(--danger-soft)' : 'var(--success-soft)'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">
-            ${t.tipo === 'uscita' ? '↑' : '↓'}
+          <div style="width:36px;height:36px;border-radius:10px;background:${t.tipo === 'uscita' ? 'var(--danger-soft)' : 'var(--success-soft)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="${t.tipo === 'uscita' ? 'var(--danger)' : 'var(--success)'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              ${t.tipo === 'uscita' ? '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>' : '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'}
+            </svg>
           </div>
           <div class="item-text">
             <div class="item-title" style="font-size:var(--font-sm)">${t.descrizione || t.categoria}</div>
             <div class="item-subtitle">${new Date(t.data).toLocaleDateString('it-IT')}</div>
           </div>
-          <div style="font-size:var(--font-sm);font-weight:600;color:${t.tipo === 'uscita' ? 'var(--danger)' : 'var(--success)'}">
+          <div style="font-size:var(--font-sm);font-weight:700;color:${t.tipo === 'uscita' ? 'var(--danger)' : 'var(--success)'}">
             ${t.tipo === 'uscita' ? '-' : '+'}€${t.importo.toFixed(2)}
           </div>
         </div>

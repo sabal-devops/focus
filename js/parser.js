@@ -14,6 +14,23 @@ const CATEGORY_MAP = {
   'cinema': 'Svago', 'concerto': 'Svago', 'teatro': 'Svago', 'gioco': 'Svago',
 };
 
+const FOOD_WORDS = new Set([
+  'pane', 'latte', 'acqua', 'pasta', 'riso', 'pollo', 'carne', 'pesce', 'uova', 'uovo',
+  'formaggio', 'mozzarella', 'prosciutto', 'salame', 'burro', 'olio', 'sale', 'zucchero',
+  'farina', 'biscotti', 'cereali', 'yogurt', 'frutta', 'verdura', 'insalata',
+  'pomodori', 'pomodoro', 'patate', 'patata', 'cipolle', 'cipolla', 'aglio',
+  'carote', 'carota', 'zucchine', 'zucchina', 'melanzane', 'melanzana', 'peperoni', 'peperone',
+  'banane', 'banana', 'mele', 'mela', 'arance', 'arancia', 'limoni', 'limone',
+  'fragole', 'fragola', 'pere', 'pera', 'uva', 'anguria', 'melone', 'pesca', 'pesche',
+  'tonno', 'salmone', 'gamberi', 'vongole', 'calamari',
+  'pizza', 'birra', 'vino', 'caffe', 'caffè', 'te', 'tè', 'succo', 'coca', 'cola',
+  'bottiglia', 'bottiglie', 'lattina', 'lattine', 'pacchi', 'pacco', 'scatola', 'scatole',
+  'gelato', 'cioccolato', 'cioccolata', 'nutella', 'marmellata', 'miele',
+  'salsiccia', 'salsicce', 'wurstel', 'hamburger', 'bacon', 'pancetta',
+  'detersivo', 'sapone', 'shampoo', 'carta', 'scottex', 'fazzoletti', 'pannolini',
+  'tovaglioli', 'spugna', 'candeggina', 'ammorbidente',
+]);
+
 function normalize(text) {
   return text.toLowerCase()
     .replace(/[àáâã]/g, 'a')
@@ -28,7 +45,6 @@ function extractAmount(text) {
   const patterns = [
     /(\d+[.,]?\d*)\s*(?:euro|€)/i,
     /(?:euro|€)\s*(\d+[.,]?\d*)/i,
-    /speso\s+(\d+[.,]?\d*)/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
@@ -37,18 +53,30 @@ function extractAmount(text) {
   return null;
 }
 
-function extractProducts(text) {
-  const cleaned = text
+function cleanProductName(name) {
+  return name
+    .replace(/^\d+\s*/, '')
+    .replace(/\b(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function extractSmartProducts(text) {
+  let cleaned = text
     .replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '')
     .replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '')
-    .replace(/ho (?:comprato|preso|acquistato)/gi, '')
-    .replace(/(?:al|dal|per il|per la|per|dal|dalla|al|alla|allo)\s+\w+$/gi, '')
+    .replace(/\bho\s+(?:comprato|preso|acquistato|speso)\b/gi, '')
+    .replace(/\b(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
+    .replace(/\b(?:per|a|da|al|alla|dal|dalla|allo|dello|della|nel|nella)\s*$/gi, '')
+    .replace(/\b(?:per|a|da)\s+\d/gi, '')
     .trim();
 
+  if (!cleaned) return [];
+
   const items = cleaned
-    .split(/\s*[,e]\s+/)
+    .split(/\s*[,]\s+|\s+e\s+/)
     .map(s => s.trim())
-    .filter(s => s.length > 1 && s.length < 40);
+    .filter(s => s.length > 1 && s.length < 50);
 
   return items;
 }
@@ -58,7 +86,23 @@ function guessCategory(text) {
   for (const [keyword, cat] of Object.entries(CATEGORY_MAP)) {
     if (norm.includes(keyword)) return cat;
   }
+  const words = norm.split(/\s+/);
+  for (const w of words) {
+    if (FOOD_WORDS.has(w)) return 'Alimentazione';
+  }
   return 'Altro';
+}
+
+function looksLikePurchase(text) {
+  const norm = normalize(text);
+  const hasPrice = /\d+[.,]?\d*\s*(?:euro|€)/i.test(norm) || /(?:euro|€)\s*\d+[.,]?\d*/i.test(norm);
+  if (!hasPrice) return false;
+
+  const words = norm.replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '').replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '').trim().split(/\s+/);
+  const hasFoodWord = words.some(w => FOOD_WORDS.has(w));
+  const hasProduct = words.filter(w => w.length > 2 && !/^(per|che|con|del|della|dei|delle|gli|nel|nella|sul|alla|allo|dal|dalla|uno|una)$/.test(w)).length > 0;
+
+  return hasFoodWord || hasProduct;
 }
 
 const PATTERNS = [
@@ -66,21 +110,24 @@ const PATTERNS = [
     name: 'acquisto_con_spesa',
     match: /ho (?:comprato|preso|acquistato)\s+(.+?)(?:\.\s*|\s+)ho speso\s+(\d+[.,]?\d*)\s*(?:euro|€)/i,
     async handler(m) {
-      const products = extractProducts(m[1]);
+      const products = extractSmartProducts(m[1]);
       const amount = parseFloat(m[2].replace(',', '.'));
       const actions = [];
       const responses = [];
 
       for (const p of products) {
-        await db.add('spesa', { nome: p, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
-        await addOrUpdateDispensa(p, null);
-        actions.push({ type: 'spesa', item: p });
+        const name = cleanProductName(p);
+        if (!name) continue;
+        await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+        await addOrUpdateDispensa(name, null);
+        actions.push({ type: 'spesa', item: name });
       }
 
-      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: 'Alimentazione', descrizione: `Acquisto: ${products.join(', ')}`, data: new Date().toISOString() });
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: 'Alimentazione', descrizione: `Acquisto: ${products.map(cleanProductName).join(', ')}`, data: new Date().toISOString() });
       actions.push({ type: 'transazione', amount });
 
-      responses.push(`Ho registrato ${products.join(', ')} nella spesa e dispensa.`);
+      const names = products.map(cleanProductName).filter(Boolean);
+      responses.push(`Ho registrato ${names.join(', ')} nella spesa e dispensa.`);
       responses.push(`Spesa di €${amount.toFixed(2)} registrata.`);
 
       return { actions, response: responses.join(' ') };
@@ -91,23 +138,26 @@ const PATTERNS = [
     match: /ho (?:comprato|preso|acquistato)\s+(.+)/i,
     async handler(m) {
       const fullText = m[1];
-      const products = extractProducts(fullText);
+      const products = extractSmartProducts(fullText);
       const amount = extractAmount(fullText);
       const actions = [];
       const responses = [];
 
       for (const p of products) {
-        await db.add('spesa', { nome: p, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
-        await addOrUpdateDispensa(p, null);
-        actions.push({ type: 'spesa', item: p });
+        const name = cleanProductName(p);
+        if (!name) continue;
+        await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+        await addOrUpdateDispensa(name, null);
+        actions.push({ type: 'spesa', item: name });
       }
 
-      if (products.length > 0) {
-        responses.push(`Ho registrato: ${products.join(', ')}.`);
+      const names = products.map(cleanProductName).filter(Boolean);
+      if (names.length > 0) {
+        responses.push(`Ho registrato: ${names.join(', ')}.`);
       }
 
       if (amount) {
-        await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(fullText), descrizione: `Acquisto: ${products.join(', ')}`, data: new Date().toISOString() });
+        await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(fullText), descrizione: `Acquisto: ${names.join(', ')}`, data: new Date().toISOString() });
         actions.push({ type: 'transazione', amount });
         responses.push(`Spesa di €${amount.toFixed(2)} registrata.`);
       }
@@ -138,10 +188,124 @@ const PATTERNS = [
     }
   },
   {
-    name: 'aggiungi_spesa',
-    match: /(?:compra|devo comprare|aggiungi|metti|serve)\s+(.+?)(?:\s+alla\s+(?:lista|spesa))?$/i,
+    name: 'speso_senza_ho',
+    match: /speso\s+(\d+[.,]?\d*)\s*(?:euro|€)?(.*)$/i,
     async handler(m) {
-      const products = m[1].split(/\s*[,e]\s+/).map(s => s.trim()).filter(s => s.length > 1);
+      const amount = parseFloat(m[1].replace(',', '.'));
+      const context = m[2] ? m[2].trim() : '';
+      const category = guessCategory(context);
+      const desc = context.replace(/^(?:per|al|alla|dal|dalla|allo|in)\s+/i, '').trim();
+
+      await db.add('transazioni', {
+        importo: amount, tipo: 'uscita',
+        categoria: category,
+        descrizione: desc || null,
+        data: new Date().toISOString()
+      });
+
+      return {
+        actions: [{ type: 'transazione', amount, category }],
+        response: `Registrato: €${amount.toFixed(2)} in ${category}${desc ? ` (${desc})` : ''}.`
+      };
+    }
+  },
+  {
+    name: 'prodotto_comprato_passivo',
+    match: /^(\d+\s+)?(.+?)\s+(?:comprat[oaie]|pres[oaie]|acquistat[oaie])\s+(?:a|per)\s+(\d+[.,]?\d*)\s*(?:euro|€)?$/i,
+    async handler(m) {
+      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const product = m[2].trim();
+      const amount = parseFloat(m[3].replace(',', '.'));
+      const name = cleanProductName(product);
+      if (!name) return null;
+
+      await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(name, qty);
+
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
+
+      return {
+        actions: [{ type: 'spesa', item: name }, { type: 'transazione', amount }],
+        response: `Registrato: ${qty ? qty + ' ' : ''}${name} — €${amount.toFixed(2)}.`
+      };
+    }
+  },
+  {
+    name: 'prodotto_con_prezzo',
+    match: /^(\d+\s+)?(.+?)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
+    async handler(m) {
+      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const product = m[2].trim();
+      const amount = parseFloat(m[3].replace(',', '.'));
+
+      const name = cleanProductName(product);
+      if (!name || name.length < 2) return null;
+
+      const normName = normalize(name);
+      const words = normName.split(/\s+/);
+      const isFoodOrProduct = words.some(w => FOOD_WORDS.has(w)) || name.length >= 3;
+
+      if (!isFoodOrProduct) return null;
+
+      await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(name, qty);
+
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
+
+      return {
+        actions: [{ type: 'spesa', item: name }, { type: 'transazione', amount }],
+        response: `Registrato: ${qty ? qty + ' ' : ''}${name} — €${amount.toFixed(2)}.`
+      };
+    }
+  },
+  {
+    name: 'prodotto_a_prezzo',
+    match: /^(\d+\s+)?(.+?)\s+(?:a|per)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
+    async handler(m) {
+      const qty = m[1] ? parseInt(m[1].trim()) : null;
+      const product = m[2].trim();
+      const amount = parseFloat(m[3].replace(',', '.'));
+
+      const name = cleanProductName(product);
+      if (!name || name.length < 2) return null;
+
+      await db.add('spesa', { nome: name, quantita: qty, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(name, qty);
+
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(name), descrizione: `Acquisto: ${qty ? qty + ' ' : ''}${name}`, data: new Date().toISOString() });
+
+      return {
+        actions: [{ type: 'spesa', item: name }, { type: 'transazione', amount }],
+        response: `Registrato: ${qty ? qty + ' ' : ''}${name} — €${amount.toFixed(2)}.`
+      };
+    }
+  },
+  {
+    name: 'pagato_prezzo',
+    match: /(?:ho )?pagato\s+(\d+[.,]?\d*)\s*(?:euro|€)?\s*(?:per|di|il|la|lo|l')?\s*(.*)?$/i,
+    async handler(m) {
+      const amount = parseFloat(m[1].replace(',', '.'));
+      const context = m[2] ? m[2].trim() : '';
+      const category = guessCategory(context);
+
+      await db.add('transazioni', {
+        importo: amount, tipo: 'uscita',
+        categoria: category,
+        descrizione: context || null,
+        data: new Date().toISOString()
+      });
+
+      return {
+        actions: [{ type: 'transazione', amount, category }],
+        response: `Pagamento di €${amount.toFixed(2)} registrato${context ? ` (${context})` : ''}.`
+      };
+    }
+  },
+  {
+    name: 'aggiungi_spesa',
+    match: /(?:compra|devo comprare|aggiungi|metti|serve|servono|mi serve|mi servono)\s+(.+?)(?:\s+alla\s+(?:lista|spesa))?$/i,
+    async handler(m) {
+      const products = m[1].split(/\s*[,]\s+|\s+e\s+/).map(s => s.trim()).filter(s => s.length > 1);
       for (const p of products) {
         await db.add('spesa', { nome: p, quantita: null, unita: null, completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null });
       }
@@ -171,7 +335,7 @@ const PATTERNS = [
   },
   {
     name: 'guadagno',
-    match: /(?:ho (?:guadagnato|ricevuto|incassato))\s+(\d+[.,]?\d*)\s*(?:euro|€)?(.*)$/i,
+    match: /(?:ho (?:guadagnato|ricevuto|incassato)|mi hanno (?:dato|pagato))\s+(\d+[.,]?\d*)\s*(?:euro|€)?(.*)$/i,
     async handler(m) {
       const amount = parseFloat(m[1].replace(',', '.'));
       const context = m[2] ? m[2].trim() : '';
@@ -250,33 +414,6 @@ const PATTERNS = [
     }
   },
   {
-    name: 'evento',
-    match: /(?:ho|c'e'|c'è|devo andare|vado)\s+(?:il |la |lo |l'|un |una |)?([\w\s]+?)(?:\s+(?:il giorno|il|di|del|della)\s+)?(\w+(?:\s+\w+)?)\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?)?/i,
-    async handler(m, originalText) {
-      const titolo = m[1].trim();
-      const when = m[2] ? m[2].trim() : '';
-      const ora = m[3] ? m[3].replace('.', ':') : null;
-
-      const data = parseItalianDate(when);
-      if (!data) return null;
-
-      await db.add('eventi', {
-        titolo,
-        data: data.toISOString().slice(0, 10),
-        ora: ora || null,
-        luogo: null,
-        tipo: guessEventType(titolo),
-        note: null
-      });
-
-      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
-      return {
-        actions: [{ type: 'evento', item: titolo }],
-        response: `Evento registrato: "${titolo}" per ${giornoStr}${ora ? ' alle ' + ora : ''}.`
-      };
-    }
-  },
-  {
     name: 'evento_semplice',
     match: /(?:ho|c'e'|c'è)\s+(?:il |la |lo |l'|un |una |)?([\w\s]+?)\s+(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|oggi|domani|dopodomani)(?:\s+alle?\s+(\d{1,2}(?:[:.]\d{2})?))?/i,
     async handler(m) {
@@ -300,6 +437,33 @@ const PATTERNS = [
       return {
         actions: [{ type: 'evento', item: titolo }],
         response: `Segnato: "${titolo}" — ${giornoStr}${ora ? ' alle ' + ora : ''}.`
+      };
+    }
+  },
+  {
+    name: 'evento',
+    match: /(?:ho|c'e'|c'è|devo andare|vado)\s+(?:il |la |lo |l'|un |una |)?([\w\s]+?)(?:\s+(?:il giorno|il|di|del|della)\s+)?(\w+(?:\s+\w+)?)\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?)?/i,
+    async handler(m) {
+      const titolo = m[1].trim();
+      const when = m[2] ? m[2].trim() : '';
+      const ora = m[3] ? m[3].replace('.', ':') : null;
+
+      const data = parseItalianDate(when);
+      if (!data) return null;
+
+      await db.add('eventi', {
+        titolo,
+        data: data.toISOString().slice(0, 10),
+        ora: ora || null,
+        luogo: null,
+        tipo: guessEventType(titolo),
+        note: null
+      });
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      return {
+        actions: [{ type: 'evento', item: titolo }],
+        response: `Evento registrato: "${titolo}" per ${giornoStr}${ora ? ' alle ' + ora : ''}.`
       };
     }
   },
@@ -419,12 +583,38 @@ export async function parseMessage(text) {
   for (const pattern of PATTERNS) {
     const m = norm.match(pattern.match) || text.match(pattern.match);
     if (m) {
-      return pattern.handler(m);
+      const result = await pattern.handler(m);
+      if (result) return result;
+    }
+  }
+
+  if (looksLikePurchase(text)) {
+    const amount = extractAmount(text);
+    const products = extractSmartProducts(text);
+    const names = products.map(cleanProductName).filter(p => p && p.length >= 2);
+    const actions = [];
+
+    for (const name of names) {
+      await db.add('spesa', { nome: name, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(name, null);
+      actions.push({ type: 'spesa', item: name });
+    }
+
+    if (amount) {
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(text), descrizione: names.length > 0 ? `Acquisto: ${names.join(', ')}` : null, data: new Date().toISOString() });
+      actions.push({ type: 'transazione', amount });
+    }
+
+    if (actions.length > 0) {
+      const parts = [];
+      if (names.length > 0) parts.push(`Registrato: ${names.join(', ')}`);
+      if (amount) parts.push(`€${amount.toFixed(2)}`);
+      return { actions, response: parts.join(' — ') + '.' };
     }
   }
 
   return {
     actions: [],
-    response: 'Non ho riconosciuto un\'azione. Prova: "ho comprato...", "ho speso...", "compra...", "ho il dentista giovedì", "la patente scade il 15 marzo 2027".'
+    response: 'Non ho capito. Prova con: "latte 2 euro", "ho comprato pane", "compra uova", "ho speso 30 euro al supermercato", "ho il dentista giovedì".'
   };
 }

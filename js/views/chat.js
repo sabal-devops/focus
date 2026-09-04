@@ -9,30 +9,32 @@ let isRecording = false;
 let ttsEnabled = true;
 
 export async function render(container) {
-  const hasSpeech = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const hasSpeech = !!SpeechRec;
 
   container.innerHTML = `
     <div class="view-container" style="display:flex;flex-direction:column;height:100%;padding-bottom:0">
-      <div class="view-header" style="padding-bottom:var(--space-sm);display:flex;justify-content:space-between;align-items:flex-start">
+      <div class="chat-header">
         <div>
           <h1>Chat</h1>
-          <p id="ai-status" style="display:flex;align-items:center;gap:6px"><span class="status-dot offline"></span> Verifica connessione...</p>
+          <p id="ai-status"><span class="status-dot offline"></span> Verifica connessione...</p>
         </div>
-        <button id="tts-toggle" class="btn btn-ghost btn-icon" style="margin-top:4px" title="Attiva/disattiva voce">
-          <svg id="tts-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <button id="tts-toggle" class="btn-circle btn-circle-sm" title="Attiva/disattiva voce">
+          <svg id="tts-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         </button>
       </div>
-      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 0 var(--space-md)"></div>
-      <div id="chat-input-area" style="padding:var(--space-sm) 0 var(--space-md);position:sticky;bottom:calc(var(--navbar-height) + var(--safe-bottom))">
-        <form id="chat-form" style="display:flex;gap:var(--space-sm);align-items:flex-end">
+      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:var(--space-sm) 0 var(--space-md)"></div>
+      <div id="chat-toast" class="chat-toast"></div>
+      <div class="chat-input-bar">
+        <form id="chat-form" class="chat-form">
           ${hasSpeech ? `
-            <button type="button" id="mic-btn" class="btn btn-ghost" style="width:48px;height:48px;padding:0;border-radius:var(--radius-full);flex-shrink:0;border:1px solid var(--border)">
+            <button type="button" id="mic-btn" class="btn-circle mic-btn" title="Registra voce">
               <svg id="mic-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             </button>
           ` : ''}
-          <input type="text" id="chat-input" class="input-field" placeholder="Racconta qualcosa..." autocomplete="off" style="flex:1">
-          <button type="submit" class="btn btn-primary" style="width:48px;height:48px;padding:0;border-radius:var(--radius-full);flex-shrink:0">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          <input type="text" id="chat-input" class="chat-input" placeholder="Scrivi qualcosa..." autocomplete="off">
+          <button type="submit" class="btn-circle send-btn">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </form>
       </div>
@@ -50,6 +52,7 @@ export async function render(container) {
     ttsEnabled = !ttsEnabled;
     const icon = document.getElementById('tts-icon');
     icon.style.opacity = ttsEnabled ? '1' : '0.3';
+    showToast(ttsEnabled ? 'Voce attivata' : 'Voce disattivata');
   });
 
   if (hasSpeech) {
@@ -75,6 +78,14 @@ export async function render(container) {
   });
 
   input.focus();
+}
+
+function showToast(text) {
+  const toast = document.getElementById('chat-toast');
+  if (!toast) return;
+  toast.textContent = text;
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 2500);
 }
 
 async function processMessage(text, messagesEl) {
@@ -112,7 +123,7 @@ async function processMessage(text, messagesEl) {
   const botMsg = {
     timestamp: Date.now(),
     text: result.response,
-    sender: 'nodo',
+    sender: 'focus',
     parsed: true,
     actions: result.actions || []
   };
@@ -150,31 +161,51 @@ function setupSpeechRecognition(input, form) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return;
 
-  recognition = new SpeechRecognition();
-  recognition.lang = 'it-IT';
-  recognition.continuous = false;
-  recognition.interimResults = true;
+  try {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    input.value = transcript;
-
-    if (event.results[event.results.length - 1].isFinal) {
-      stopRecording();
-      if (transcript.trim()) {
-        form.dispatchEvent(new Event('submit'));
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
       }
-    }
-  };
+      input.value = transcript;
 
-  recognition.onerror = () => { stopRecording(); };
-  recognition.onend = () => { stopRecording(); };
+      if (event.results[event.results.length - 1].isFinal) {
+        stopRecording();
+        if (transcript.trim()) {
+          form.dispatchEvent(new Event('submit'));
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      stopRecording();
+      if (event.error === 'not-allowed') {
+        showToast('Permesso microfono negato. Vai in Impostazioni > Safari > Microfono');
+      } else if (event.error === 'no-speech') {
+        showToast('Nessun audio rilevato, riprova');
+      } else if (event.error === 'network') {
+        showToast('Errore di rete per il riconoscimento vocale');
+      } else {
+        showToast('Microfono non disponibile');
+      }
+    };
+
+    recognition.onend = () => { stopRecording(); };
+  } catch (e) {
+    recognition = null;
+  }
 }
 
 function toggleRecording() {
+  if (!recognition) {
+    showToast('Riconoscimento vocale non supportato su questo dispositivo');
+    return;
+  }
   if (isRecording) {
     recognition.stop();
     stopRecording();
@@ -184,24 +215,38 @@ function toggleRecording() {
 }
 
 function startRecording() {
-  if (!recognition) return;
-  isRecording = true;
-  const btn = document.getElementById('mic-btn');
-  if (btn) {
-    btn.style.background = 'var(--danger)';
-    btn.style.borderColor = 'var(--danger)';
-    btn.style.color = '#fff';
+  if (!recognition) {
+    showToast('Riconoscimento vocale non disponibile');
+    return;
   }
-  recognition.start();
+  try {
+    isRecording = true;
+    const btn = document.getElementById('mic-btn');
+    if (btn) {
+      btn.classList.add('recording');
+    }
+    showToast('Sto ascoltando...');
+    recognition.start();
+  } catch (e) {
+    stopRecording();
+    if (e.message && e.message.includes('already started')) {
+      recognition.stop();
+      setTimeout(() => {
+        try { recognition.start(); isRecording = true; } catch (_) {
+          showToast('Errore avvio microfono');
+        }
+      }, 200);
+    } else {
+      showToast('Impossibile avviare il microfono');
+    }
+  }
 }
 
 function stopRecording() {
   isRecording = false;
   const btn = document.getElementById('mic-btn');
   if (btn) {
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.style.color = '';
+    btn.classList.remove('recording');
   }
 }
 
@@ -274,18 +319,7 @@ async function executeAiActions(actions) {
 function appendMessage(container, msg) {
   const div = document.createElement('div');
   const isUser = msg.sender === 'user';
-  div.style.cssText = `
-    padding: 10px 14px;
-    margin-bottom: 6px;
-    border-radius: 18px;
-    max-width: 82%;
-    line-height: 1.45;
-    font-size: var(--font-md);
-    animation: fadeIn 0.2s ease-out;
-    ${isUser
-      ? 'margin-left:auto; background:linear-gradient(135deg, #8b5cf6, #6366f1); color:#fff; border-bottom-right-radius:6px;'
-      : 'margin-right:auto; background:var(--bg-card); border:1px solid var(--border-light); border-bottom-left-radius:6px;'}
-  `;
+  div.className = `chat-bubble ${isUser ? 'chat-bubble-user' : 'chat-bubble-bot'}`;
   div.textContent = msg.text;
   container.appendChild(div);
 }
@@ -293,20 +327,8 @@ function appendMessage(container, msg) {
 function appendTyping(container) {
   const div = document.createElement('div');
   div.id = 'typing-indicator';
-  div.style.cssText = `
-    padding: 10px 14px;
-    margin-bottom: 6px;
-    border-radius: 18px;
-    max-width: 82%;
-    margin-right: auto;
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-bottom-left-radius: 6px;
-    color: var(--text-muted);
-    font-size: var(--font-sm);
-    animation: fadeIn 0.2s ease-out;
-  `;
-  div.innerHTML = '<span style="animation:pulse 1.5s infinite">Sto pensando...</span>';
+  div.className = 'chat-bubble chat-bubble-bot';
+  div.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
   container.appendChild(div);
 }
 
