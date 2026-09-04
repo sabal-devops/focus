@@ -364,11 +364,22 @@
 
 /* ─── Chat ─── */
 
+.chat-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% + var(--navbar-height) + var(--safe-bottom));
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 var(--space-md);
+  margin-bottom: calc(-1 * (var(--navbar-height) + var(--safe-bottom)));
+}
+
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: var(--space-lg) var(--space-md) var(--space-sm);
+  padding: var(--space-lg) 0 var(--space-sm);
+  flex-shrink: 0;
 }
 
 .chat-header h1 {
@@ -416,9 +427,9 @@
 }
 
 .chat-input-bar {
-  padding: var(--space-sm) 0 var(--space-md);
-  position: sticky;
-  bottom: calc(var(--navbar-height) + var(--safe-bottom));
+  padding: var(--space-sm) 0;
+  padding-bottom: calc(var(--navbar-height) + var(--safe-bottom) + var(--space-sm));
+  flex-shrink: 0;
 }
 
 .chat-form {

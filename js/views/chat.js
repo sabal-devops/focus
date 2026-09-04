@@ -13,7 +13,7 @@ export async function render(container) {
   const hasSpeech = !!SpeechRec;
 
   container.innerHTML = `
-    <div class="view-container" style="display:flex;flex-direction:column;height:100%;padding-bottom:0">
+    <div class="chat-view">
       <div class="chat-header">
         <div>
           <h1>Chat</h1>
