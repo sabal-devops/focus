@@ -2,17 +2,19 @@ import { open } from './db.js';
 import { register, init as initRouter } from './router.js';
 import { render as renderNavbar } from './components/navbar.js';
 
+const V = '?v=5';
+
 async function boot() {
   await open();
 
-  const { render: homeView } = await import('./views/home.js');
-  const { render: chatView } = await import('./views/chat.js');
-  const { render: agendaView, destroy: agendaDestroy } = await import('./views/agenda.js');
-  const { render: spesaView, destroy: spesaDestroy } = await import('./views/spesa.js');
-  const { render: dispensaView, destroy: dispensaDestroy } = await import('./views/dispensa.js');
-  const { render: finanzeView, destroy: finanzeDestroy } = await import('./views/finanze.js');
-  const { render: altroView } = await import('./views/altro.js');
-  const { render: settingsView } = await import('./views/settings.js');
+  const { render: homeView } = await import('./views/home.js' + V);
+  const { render: chatView } = await import('./views/chat.js' + V);
+  const { render: agendaView, destroy: agendaDestroy } = await import('./views/agenda.js' + V);
+  const { render: spesaView, destroy: spesaDestroy } = await import('./views/spesa.js' + V);
+  const { render: dispensaView, destroy: dispensaDestroy } = await import('./views/dispensa.js' + V);
+  const { render: finanzeView, destroy: finanzeDestroy } = await import('./views/finanze.js' + V);
+  const { render: altroView } = await import('./views/altro.js' + V);
+  const { render: settingsView } = await import('./views/settings.js' + V);
 
   register('/', (c) => { homeView(c); });
   register('/chat', (c) => { chatView(c); });
