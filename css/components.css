@@ -538,6 +538,96 @@
 .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
 
+/* ─── Chat Chips ─── */
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: var(--space-xl) var(--space-sm) var(--space-md);
+  animation: fadeIn 0.4s ease-out;
+}
+
+.chat-chip {
+  padding: 10px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.chat-chip:active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(0.95);
+}
+
+.chat-chips-intro {
+  text-align: center;
+  padding: var(--space-xl) var(--space-md) var(--space-sm);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.chat-chips-intro svg {
+  opacity: 0.2;
+  margin-bottom: var(--space-md);
+}
+
+.chat-chips-intro p {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ─── Welcome Card ─── */
+
+.welcome-card {
+  background: var(--gradient-card-indigo);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+  text-align: center;
+  border: 1px solid var(--border);
+  animation: fadeIn 0.4s ease-out;
+}
+
+.welcome-card .welcome-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-md);
+}
+
+.welcome-card h2 {
+  font-size: var(--font-xl);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.welcome-card p {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-lg);
+}
+
+.welcome-card .btn-primary {
+  display: inline-flex;
+  padding: 14px 28px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-md);
+  gap: 8px;
+}
+
 /* ─── Stat Cards ─── */
 
 .stat-grid {

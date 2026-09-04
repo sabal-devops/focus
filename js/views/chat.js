@@ -63,10 +63,15 @@ export async function render(container) {
 
   const messages = await db.getAll('messages');
   messages.sort((a, b) => a.timestamp - b.timestamp);
-  for (const msg of messages) {
-    appendMessage(messagesEl, msg);
+
+  if (messages.length === 0) {
+    showSuggestionChips(messagesEl, input, form);
+  } else {
+    for (const msg of messages) {
+      appendMessage(messagesEl, msg);
+    }
+    scrollToBottom(messagesEl);
   }
-  scrollToBottom(messagesEl);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -314,6 +319,36 @@ async function executeAiActions(actions) {
       }
     }
   }
+}
+
+function showSuggestionChips(messagesEl, input, form) {
+  const suggestions = [
+    'latte 2 euro',
+    'compra pane e uova',
+    'ho speso 30 euro al supermercato',
+    'ho il dentista giovedì',
+    'ho comprato 3 banane a 1.50 euro',
+    'bolletta luce 45 euro'
+  ];
+
+  messagesEl.innerHTML = `
+    <div class="chat-chips-intro">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--text-muted)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <p>Dimmi cosa hai comprato, cosa devi comprare, o i tuoi impegni</p>
+    </div>
+    <div class="chat-chips">
+      ${suggestions.map(s => `<button class="chat-chip" type="button">${s}</button>`).join('')}
+    </div>
+  `;
+
+  messagesEl.querySelectorAll('.chat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      input.value = chip.textContent;
+      input.focus();
+      messagesEl.innerHTML = '';
+      form.dispatchEvent(new Event('submit'));
+    });
+  });
 }
 
 function appendMessage(container, msg) {

@@ -121,6 +121,19 @@ button {
   40% { transform: translateY(-4px); }
 }
 
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+#view.slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+#view.slide-in-left { animation: slideInLeft 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+
 .view-container {
   animation: fadeIn 0.25s ease-out;
 }

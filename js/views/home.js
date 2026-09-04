@@ -22,7 +22,38 @@ export async function render(container) {
 
   setGreeting();
   checkAiStatus();
-  await loadDashboard();
+
+  const isEmpty = await isFirstLaunch();
+  if (isEmpty) {
+    showWelcomeCard();
+  } else {
+    await loadDashboard();
+  }
+}
+
+async function isFirstLaunch() {
+  const spesa = await db.getAll('spesa');
+  const dispensa = await db.getAll('dispensa');
+  const transazioni = await db.getAll('transazioni');
+  const messaggi = await db.getAll('messages');
+  return spesa.length === 0 && dispensa.length === 0 && transazioni.length === 0 && messaggi.length === 0;
+}
+
+function showWelcomeCard() {
+  const el = document.getElementById('home-alerts');
+  el.innerHTML = `
+    <div class="welcome-card" style="margin-top:var(--space-lg)">
+      <div class="welcome-icon">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      </div>
+      <h2>Benvenuto in Focus</h2>
+      <p>Il tuo hub personale. Dimmi cosa compri, cosa spendi, i tuoi impegni — organizzo tutto io. Prova a scrivere qualcosa in chat!</p>
+      <a href="#/chat" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Inizia a parlare
+      </a>
+    </div>
+  `;
 }
 
 function setGreeting() {

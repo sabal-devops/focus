@@ -2,7 +2,7 @@ import { open } from './db.js';
 import { register, init as initRouter } from './router.js';
 import { render as renderNavbar } from './components/navbar.js';
 
-const V = '?v=7';
+const V = '?v=8';
 
 async function boot() {
   await open();
