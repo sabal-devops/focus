@@ -153,7 +153,7 @@ const PATTERNS = [
   },
   {
     name: 'finito',
-    match: /(?:ho finito|e' finit[oa]|è finit[oa]|finit[oa])\s+(?:il |la |lo |l'|le |i |gli )?(.+)/i,
+    match: /(?:ho finito|e' finit[oa]|è finit[oa]|finit[oa]|non ho piu'?|non ho più)\s+(?:il |la |lo |l'|le |i |gli )?(.+)/i,
     async handler(m) {
       const product = m[1].trim();
       const items = await db.getAll('dispensa');
@@ -166,6 +166,97 @@ const PATTERNS = [
       return {
         actions: [{ type: 'dispensa_update', item: product }, { type: 'spesa_add', item: product }],
         response: `${product} segnato come terminato e aggiunto alla lista della spesa.`
+      };
+    }
+  },
+  {
+    name: 'guadagno',
+    match: /(?:ho (?:guadagnato|ricevuto|incassato))\s+(\d+[.,]?\d*)\s*(?:euro|€)?(.*)$/i,
+    async handler(m) {
+      const amount = parseFloat(m[1].replace(',', '.'));
+      const context = m[2] ? m[2].trim() : '';
+      const desc = context.replace(/^(?:per|da|di|con)\s+/i, '').trim();
+
+      await db.add('transazioni', {
+        importo: amount, tipo: 'entrata',
+        categoria: 'Altro',
+        descrizione: desc || null,
+        data: new Date().toISOString()
+      });
+
+      return {
+        actions: [{ type: 'transazione', amount, tipo: 'entrata' }],
+        response: `Entrata di €${amount.toFixed(2)} registrata${desc ? ` (${desc})` : ''}.`
+      };
+    }
+  },
+  {
+    name: 'quanto_speso',
+    match: /(?:quanto ho speso|quanto sto spendendo|totale spese|riepilogo spese)(?:\s+(?:questo|a|in|di)\s+(\w+))?/i,
+    async handler(m) {
+      const all = await db.getAll('transazioni');
+      const now = new Date();
+      const meseCorrente = all.filter(t => {
+        const d = new Date(t.data);
+        return t.tipo === 'uscita' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+      const totale = meseCorrente.reduce((s, t) => s + t.importo, 0);
+
+      const perCategoria = {};
+      for (const t of meseCorrente) {
+        const cat = t.categoria || 'Altro';
+        perCategoria[cat] = (perCategoria[cat] || 0) + t.importo;
+      }
+
+      const dettaglio = Object.entries(perCategoria)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cat, tot]) => `${cat}: €${tot.toFixed(2)}`)
+        .join(', ');
+
+      const mese = now.toLocaleDateString('it-IT', { month: 'long' });
+      return {
+        actions: [],
+        response: `A ${mese} hai speso €${totale.toFixed(2)}. ${dettaglio ? `Dettaglio: ${dettaglio}.` : ''}`
+      };
+    }
+  },
+  {
+    name: 'cosa_in_dispensa',
+    match: /(?:cosa ho|che cosa ho|cosa c'e'|cosa c'è|cosa abbiamo)(?:\s+in)?\s*(?:casa|dispensa|frigo|frigorifero|cucina)/i,
+    async handler() {
+      const items = await db.getAll('dispensa');
+      if (items.length === 0) {
+        return { actions: [], response: 'La dispensa è vuota. Racconta i tuoi acquisti e la riempio io!' };
+      }
+      const list = items.map(i => {
+        const q = i.quantita;
+        const status = q === 0 ? ' (terminato)' : q !== null && q <= 1 ? ' (quasi finito)' : '';
+        return `${i.nome}${status}`;
+      }).join(', ');
+      return { actions: [], response: `In dispensa hai: ${list}.` };
+    }
+  },
+  {
+    name: 'cosa_comprare',
+    match: /(?:cosa devo|che cosa devo|che devo)\s*(?:comprare|prendere)|(?:lista della spesa|mostra(?:mi)?\s+(?:la\s+)?spesa)/i,
+    async handler() {
+      const items = await db.getAll('spesa');
+      const daComprare = items.filter(i => !i.completato);
+      if (daComprare.length === 0) {
+        return { actions: [], response: 'La lista della spesa è vuota. Tutto a posto!' };
+      }
+      const list = daComprare.map(i => i.nome).join(', ');
+      return { actions: [], response: `Da comprare: ${list} (${daComprare.length} prodotti).` };
+    }
+  },
+  {
+    name: 'mangiato',
+    match: /(?:ho mangiato|a pranzo|a cena|a colazione|per pranzo|per cena|per colazione)\s+(.+)/i,
+    async handler(m) {
+      const food = m[1].replace(/ho (?:mangiato|preso)\s*/i, '').trim();
+      return {
+        actions: [{ type: 'alimentazione', item: food }],
+        response: `Ho annotato: ${food}. (La sezione alimentazione sarà disponibile presto!)`
       };
     }
   },

@@ -79,3 +79,45 @@ button {
 }
 
 ::-webkit-scrollbar { display: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.view-container {
+  animation: fadeIn 0.25s ease-out;
+}
+
+.card {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.card:nth-child(2) { animation-delay: 0.05s; }
+.card:nth-child(3) { animation-delay: 0.1s; }
+.card:nth-child(4) { animation-delay: 0.15s; }
+.card:nth-child(5) { animation-delay: 0.2s; }
+
+.list-item {
+  animation: fadeIn 0.25s ease-out both;
+}
+
+.list-item:nth-child(2) { animation-delay: 0.03s; }
+.list-item:nth-child(3) { animation-delay: 0.06s; }
+.list-item:nth-child(4) { animation-delay: 0.09s; }
+.list-item:nth-child(5) { animation-delay: 0.12s; }
+
+.list-item.checked .check {
+  animation: pop 0.3s ease-out;
+}

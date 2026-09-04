@@ -1,13 +1,16 @@
 import * as db from '../db.js';
 import { parseMessage } from '../parser.js';
+import * as ai from '../ai.js';
 import { emit } from '../store.js';
+
+let ollamaAvailable = false;
 
 export async function render(container) {
   container.innerHTML = `
     <div class="view-container" style="display:flex;flex-direction:column;height:100%;padding-bottom:0">
       <div class="view-header">
         <h1>Chat</h1>
-        <p id="ai-status">Parser locale attivo</p>
+        <p id="ai-status"><span class="status-dot offline"></span> Verifica connessione AI...</p>
       </div>
       <div id="chat-messages" style="flex:1;overflow-y:auto;padding-bottom:var(--space-md)"></div>
       <div id="chat-input-area" style="padding:var(--space-sm) 0 var(--space-md);position:sticky;bottom:calc(var(--navbar-height) + var(--safe-bottom))">
@@ -24,6 +27,8 @@ export async function render(container) {
   const messagesEl = document.getElementById('chat-messages');
   const form = document.getElementById('chat-form');
   const input = document.getElementById('chat-input');
+
+  checkAiStatus();
 
   const messages = await db.getAll('messages');
   messages.sort((a, b) => a.timestamp - b.timestamp);
@@ -49,15 +54,32 @@ export async function render(container) {
     const msgId = await db.add('messages', userMsg);
     userMsg.id = msgId;
     appendMessage(messagesEl, userMsg);
+    scrollToBottom(messagesEl);
 
-    const result = await parseMessage(text);
+    appendTyping(messagesEl);
+
+    let result;
+
+    if (ollamaAvailable) {
+      const aiResult = await ai.chat(text);
+      if (aiResult && aiResult.response) {
+        result = aiResult;
+        await executeAiActions(result.actions || []);
+      } else {
+        result = await parseMessage(text);
+      }
+    } else {
+      result = await parseMessage(text);
+    }
+
+    removeTyping(messagesEl);
 
     const botMsg = {
       timestamp: Date.now(),
       text: result.response,
       sender: 'nodo',
       parsed: true,
-      actions: result.actions
+      actions: result.actions || []
     };
 
     const botId = await db.add('messages', botMsg);
@@ -65,12 +87,78 @@ export async function render(container) {
     appendMessage(messagesEl, botMsg);
     scrollToBottom(messagesEl);
 
-    if (result.actions.length > 0) {
-      emit('data-changed', { source: 'chat', actions: result.actions });
+    if (botMsg.actions.length > 0) {
+      emit('data-changed', { source: 'chat', actions: botMsg.actions });
     }
   });
 
   input.focus();
+}
+
+async function checkAiStatus() {
+  const statusEl = document.getElementById('ai-status');
+  if (!statusEl) return;
+
+  ollamaAvailable = await ai.isAvailable();
+
+  if (ollamaAvailable) {
+    const models = await ai.getModels();
+    const model = await db.getSetting('ollama_model') || models[0] || 'llama3.2';
+    statusEl.innerHTML = `<span class="status-dot online"></span> AI connessa (${model})`;
+  } else {
+    statusEl.innerHTML = `<span class="status-dot offline"></span> Parser locale attivo`;
+  }
+}
+
+async function executeAiActions(actions) {
+  for (const action of actions) {
+    switch (action.type) {
+      case 'spesa_add':
+        await db.add('spesa', {
+          nome: action.item, quantita: action.quantita || null, unita: action.unita || null,
+          completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null
+        });
+        break;
+      case 'spesa_done':
+        await db.add('spesa', {
+          nome: action.item, quantita: null, unita: null,
+          completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString()
+        });
+        break;
+      case 'transazione':
+        await db.add('transazioni', {
+          importo: action.importo, tipo: 'uscita',
+          categoria: action.categoria || 'Altro',
+          descrizione: action.descrizione || null,
+          data: new Date().toISOString()
+        });
+        break;
+      case 'dispensa_add': {
+        const items = await db.getAll('dispensa');
+        const found = items.find(i => i.nome.toLowerCase() === action.item.toLowerCase());
+        if (found) {
+          found.ultimoAcquisto = new Date().toISOString();
+          if (action.quantita) found.quantita = (found.quantita || 0) + action.quantita;
+          await db.put('dispensa', found);
+        } else {
+          await db.add('dispensa', {
+            nome: action.item, quantita: action.quantita || null, unita: action.unita || null,
+            ultimoAcquisto: new Date().toISOString(), consumoMedio: null, stimaEsaurimento: null
+          });
+        }
+        break;
+      }
+      case 'dispensa_update': {
+        const items = await db.getAll('dispensa');
+        const found = items.find(i => i.nome.toLowerCase() === action.item.toLowerCase());
+        if (found) {
+          if (action.quantita !== undefined) found.quantita = action.quantita;
+          await db.put('dispensa', found);
+        }
+        break;
+      }
+    }
+  }
 }
 
 function appendMessage(container, msg) {
@@ -80,12 +168,36 @@ function appendMessage(container, msg) {
     margin-bottom: var(--space-xs);
     border-radius: var(--radius-md);
     max-width: 85%;
+    line-height: 1.4;
     ${msg.sender === 'user'
       ? 'margin-left:auto; background:var(--accent); color:#fff;'
       : 'margin-right:auto; background:var(--bg-card); border:1px solid var(--border-light);'}
   `;
   div.textContent = msg.text;
   container.appendChild(div);
+}
+
+function appendTyping(container) {
+  const div = document.createElement('div');
+  div.id = 'typing-indicator';
+  div.style.cssText = `
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-xs);
+    border-radius: var(--radius-md);
+    max-width: 85%;
+    margin-right: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    font-size: var(--font-sm);
+  `;
+  div.textContent = 'Sto pensando...';
+  container.appendChild(div);
+}
+
+function removeTyping(container) {
+  const el = container.querySelector('#typing-indicator');
+  if (el) el.remove();
 }
 
 function scrollToBottom(el) {

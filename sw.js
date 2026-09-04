@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nodo-v1';
+const CACHE_NAME = 'nodo-v2';
 const ASSETS = [
   './',
   './index.html',
