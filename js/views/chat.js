@@ -173,7 +173,7 @@ function appendMessage(container, msg) {
     font-size: var(--font-md);
     animation: fadeIn 0.2s ease-out;
     ${isUser
-      ? 'margin-left:auto; background:var(--accent); color:#fff; border-bottom-right-radius:6px;'
+      ? 'margin-left:auto; background:linear-gradient(135deg, #8b5cf6, #6366f1); color:#fff; border-bottom-right-radius:6px;'
       : 'margin-right:auto; background:var(--bg-card); border:1px solid var(--border-light); border-bottom-left-radius:6px;'}
   `;
   div.textContent = msg.text;

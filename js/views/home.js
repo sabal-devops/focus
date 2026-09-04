@@ -125,8 +125,8 @@ async function loadDashboard() {
     `;
   } else {
     alertsEl.innerHTML = `
-      <div style="background:linear-gradient(135deg, rgba(52,211,153,0.08), rgba(74,124,255,0.08));border-radius:var(--radius-lg);padding:var(--space-xl);text-align:center;margin-bottom:var(--space-md);border:1px solid var(--border-light)">
-        <div style="width:48px;height:48px;border-radius:var(--radius-full);background:var(--success-soft);display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-md);font-size:22px">✓</div>
+      <div style="background:linear-gradient(135deg, rgba(139,92,246,0.08), rgba(99,102,241,0.06), rgba(6,182,212,0.08));border-radius:var(--radius-lg);padding:var(--space-xl);text-align:center;margin-bottom:var(--space-md);border:1px solid var(--border-light)">
+        <div style="width:52px;height:52px;border-radius:var(--radius-full);background:linear-gradient(135deg, rgba(99,102,241,0.15), rgba(52,211,153,0.15));display:flex;align-items:center;justify-content:center;margin:0 auto var(--space-md);font-size:22px">✓</div>
         <div class="item-title" style="font-size:var(--font-lg);margin-bottom:4px">Tutto in ordine</div>
         <div class="item-subtitle">Nessun avviso per ora</div>
       </div>
@@ -138,17 +138,17 @@ async function loadDashboard() {
   summaryEl.innerHTML = `
     <div class="section-title">Riepilogo ${meseCapitalized}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-sm)">
-      <div style="background:linear-gradient(145deg, #1a2744, #16162a);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid var(--border-light);box-shadow:var(--shadow-card)">
+      <div style="background:linear-gradient(145deg, rgba(139,92,246,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(139,92,246,0.15);box-shadow:var(--shadow-card)">
         <div style="font-size:18px;margin-bottom:6px">🛒</div>
         <div style="font-size:var(--font-xl);font-weight:700">${daComprare.length}</div>
         <div class="item-subtitle" style="font-size:11px">da comprare</div>
       </div>
-      <div style="background:linear-gradient(145deg, #2a1a1e, #16162a);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid var(--border-light);box-shadow:var(--shadow-card)">
+      <div style="background:linear-gradient(145deg, rgba(99,102,241,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(99,102,241,0.15);box-shadow:var(--shadow-card)">
         <div style="font-size:18px;margin-bottom:6px">💸</div>
         <div style="font-size:var(--font-xl);font-weight:700;color:var(--danger)">€${totaleUscite.toFixed(0)}</div>
         <div class="item-subtitle" style="font-size:11px">spese</div>
       </div>
-      <div style="background:linear-gradient(145deg, #1a2a22, #16162a);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid var(--border-light);box-shadow:var(--shadow-card)">
+      <div style="background:linear-gradient(145deg, rgba(6,182,212,0.12), #141830);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;border:1px solid rgba(6,182,212,0.15);box-shadow:var(--shadow-card)">
         <div style="font-size:18px;margin-bottom:6px">🏠</div>
         <div style="font-size:var(--font-xl);font-weight:700">${dispensaItems.length}</div>
         <div class="item-subtitle" style="font-size:11px">in dispensa</div>
