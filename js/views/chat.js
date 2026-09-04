@@ -8,15 +8,15 @@ let ollamaAvailable = false;
 export async function render(container) {
   container.innerHTML = `
     <div class="view-container" style="display:flex;flex-direction:column;height:100%;padding-bottom:0">
-      <div class="view-header">
+      <div class="view-header" style="padding-bottom:var(--space-sm)">
         <h1>Chat</h1>
-        <p id="ai-status"><span class="status-dot offline"></span> Verifica connessione AI...</p>
+        <p id="ai-status" style="display:flex;align-items:center;gap:6px"><span class="status-dot offline"></span> Verifica connessione...</p>
       </div>
-      <div id="chat-messages" style="flex:1;overflow-y:auto;padding-bottom:var(--space-md)"></div>
+      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 0 var(--space-md)"></div>
       <div id="chat-input-area" style="padding:var(--space-sm) 0 var(--space-md);position:sticky;bottom:calc(var(--navbar-height) + var(--safe-bottom))">
-        <form id="chat-form" style="display:flex;gap:var(--space-sm)">
+        <form id="chat-form" style="display:flex;gap:var(--space-sm);align-items:flex-end">
           <input type="text" id="chat-input" class="input-field" placeholder="Racconta qualcosa..." autocomplete="off" style="flex:1">
-          <button type="submit" class="btn btn-primary btn-icon" style="width:44px;height:44px;flex-shrink:0">
+          <button type="submit" class="btn btn-primary" style="width:48px;height:48px;padding:0;border-radius:var(--radius-full);flex-shrink:0">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </form>
@@ -163,15 +163,18 @@ async function executeAiActions(actions) {
 
 function appendMessage(container, msg) {
   const div = document.createElement('div');
+  const isUser = msg.sender === 'user';
   div.style.cssText = `
-    padding: var(--space-sm) var(--space-md);
-    margin-bottom: var(--space-xs);
-    border-radius: var(--radius-md);
-    max-width: 85%;
-    line-height: 1.4;
-    ${msg.sender === 'user'
-      ? 'margin-left:auto; background:var(--accent); color:#fff;'
-      : 'margin-right:auto; background:var(--bg-card); border:1px solid var(--border-light);'}
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    border-radius: 18px;
+    max-width: 82%;
+    line-height: 1.45;
+    font-size: var(--font-md);
+    animation: fadeIn 0.2s ease-out;
+    ${isUser
+      ? 'margin-left:auto; background:var(--accent); color:#fff; border-bottom-right-radius:6px;'
+      : 'margin-right:auto; background:var(--bg-card); border:1px solid var(--border-light); border-bottom-left-radius:6px;'}
   `;
   div.textContent = msg.text;
   container.appendChild(div);
@@ -181,17 +184,19 @@ function appendTyping(container) {
   const div = document.createElement('div');
   div.id = 'typing-indicator';
   div.style.cssText = `
-    padding: var(--space-sm) var(--space-md);
-    margin-bottom: var(--space-xs);
-    border-radius: var(--radius-md);
-    max-width: 85%;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    border-radius: 18px;
+    max-width: 82%;
     margin-right: auto;
     background: var(--bg-card);
     border: 1px solid var(--border-light);
+    border-bottom-left-radius: 6px;
     color: var(--text-muted);
     font-size: var(--font-sm);
+    animation: fadeIn 0.2s ease-out;
   `;
-  div.textContent = 'Sto pensando...';
+  div.innerHTML = '<span style="animation:pulse 1.5s infinite">Sto pensando...</span>';
   container.appendChild(div);
 }
 

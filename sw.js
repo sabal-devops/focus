@@ -1,8 +1,11 @@
-const CACHE_NAME = 'nodo-v2';
+const CACHE_NAME = 'nodo-v3';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './icons/icon-180.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './css/variables.css',
   './css/base.css',
   './css/components.css',
@@ -41,7 +44,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Network-first for API calls, cache-first for assets
   if (event.request.url.includes('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(event.request))
