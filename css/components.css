@@ -367,11 +367,10 @@
 .chat-view {
   display: flex;
   flex-direction: column;
-  height: calc(100% + var(--navbar-height) + var(--safe-bottom));
+  height: 100%;
   max-width: 600px;
   margin: 0 auto;
   padding: 0 var(--space-md);
-  margin-bottom: calc(-1 * (var(--navbar-height) + var(--safe-bottom)));
 }
 
 .chat-header {
@@ -427,9 +426,13 @@
 }
 
 .chat-input-bar {
-  padding: var(--space-sm) 0;
-  padding-bottom: calc(var(--navbar-height) + var(--safe-bottom) + var(--space-sm));
-  flex-shrink: 0;
+  position: fixed;
+  bottom: calc(var(--navbar-height) + var(--safe-bottom));
+  left: 0;
+  right: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-primary);
+  z-index: 15;
 }
 
 .chat-form {
@@ -494,7 +497,7 @@
 
 .chat-toast {
   position: fixed;
-  bottom: calc(var(--navbar-height) + var(--safe-bottom) + 80px);
+  bottom: calc(var(--navbar-height) + var(--safe-bottom) + 70px);
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: var(--bg-card);
