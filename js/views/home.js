@@ -1,5 +1,6 @@
 import * as db from '../db.js';
 import * as ai from '../ai.js';
+import { show as toast } from '../components/toast.js';
 
 export async function render(container) {
   container.innerHTML = `
@@ -13,6 +14,11 @@ export async function render(container) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </a>
       </div>
+      <div class="search-bar" id="search-bar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="home-search" placeholder="Cerca prodotti, eventi, spese..." autocomplete="off">
+      </div>
+      <div id="search-results" style="display:none"></div>
       <div id="home-ai-status"></div>
       <div id="home-alerts"></div>
       <div id="home-summary"></div>
@@ -22,6 +28,23 @@ export async function render(container) {
 
   setGreeting();
   checkAiStatus();
+
+  const searchInput = document.getElementById('home-search');
+  const searchResults = document.getElementById('search-results');
+  let searchTimer = null;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+      searchResults.style.display = 'none';
+      document.getElementById('home-ai-status').style.display = '';
+      document.getElementById('home-alerts').style.display = '';
+      document.getElementById('home-summary').style.display = '';
+      document.getElementById('home-recent').style.display = '';
+      return;
+    }
+    searchTimer = setTimeout(() => runSearch(q, searchResults), 200);
+  });
 
   const isEmpty = await isFirstLaunch();
   if (isEmpty) {
@@ -233,4 +256,75 @@ async function loadDashboard() {
       `).join('')}
     `;
   }
+}
+
+async function runSearch(query, container) {
+  const q = query.toLowerCase();
+  const results = [];
+
+  const spesa = await db.getAll('spesa');
+  const matched_spesa = spesa.filter(i => i.nome.toLowerCase().includes(q));
+  if (matched_spesa.length > 0) {
+    results.push({ group: 'Lista spesa', icon: '🛒', items: matched_spesa.map(i => ({
+      title: i.nome, subtitle: i.completato ? 'Completato' : 'Da comprare', href: '#/spesa'
+    }))});
+  }
+
+  const dispensa = await db.getAll('dispensa');
+  const matched_disp = dispensa.filter(i => i.nome.toLowerCase().includes(q));
+  if (matched_disp.length > 0) {
+    results.push({ group: 'Dispensa', icon: '🏠', items: matched_disp.map(i => ({
+      title: i.nome, subtitle: i.quantita !== null ? `Qtà: ${i.quantita}` : '', href: '#/spesa'
+    }))});
+  }
+
+  const eventi = await db.getAll('eventi');
+  const matched_ev = eventi.filter(i => i.titolo.toLowerCase().includes(q));
+  if (matched_ev.length > 0) {
+    results.push({ group: 'Eventi', icon: '📅', items: matched_ev.map(i => ({
+      title: i.titolo, subtitle: new Date(i.data).toLocaleDateString('it-IT'), href: '#/agenda'
+    }))});
+  }
+
+  const scadenze = await db.getAll('scadenze');
+  const matched_sc = scadenze.filter(i => i.titolo.toLowerCase().includes(q));
+  if (matched_sc.length > 0) {
+    results.push({ group: 'Scadenze', icon: '⏰', items: matched_sc.map(i => ({
+      title: i.titolo, subtitle: new Date(i.data).toLocaleDateString('it-IT'), href: '#/agenda'
+    }))});
+  }
+
+  const transazioni = await db.getAll('transazioni');
+  const matched_tx = transazioni.filter(i => (i.descrizione || i.categoria || '').toLowerCase().includes(q));
+  if (matched_tx.length > 0) {
+    results.push({ group: 'Transazioni', icon: '💰', items: matched_tx.slice(0, 5).map(i => ({
+      title: i.descrizione || i.categoria, subtitle: `€${i.importo.toFixed(2)} · ${new Date(i.data).toLocaleDateString('it-IT')}`, href: '#/finanze'
+    }))});
+  }
+
+  document.getElementById('home-ai-status').style.display = 'none';
+  document.getElementById('home-alerts').style.display = 'none';
+  document.getElementById('home-summary').style.display = 'none';
+  document.getElementById('home-recent').style.display = 'none';
+  container.style.display = '';
+
+  if (results.length === 0) {
+    container.innerHTML = `<div class="empty-state"><p>Nessun risultato per "${query}"</p></div>`;
+    return;
+  }
+
+  container.innerHTML = results.map(g => `
+    <div class="search-results">
+      <div class="search-group-title">${g.icon} ${g.group} (${g.items.length})</div>
+      ${g.items.map(i => `
+        <a href="${i.href}" class="list-item" style="text-decoration:none;cursor:pointer">
+          <div class="item-text">
+            <div class="item-title">${i.title}</div>
+            ${i.subtitle ? `<div class="item-subtitle">${i.subtitle}</div>` : ''}
+          </div>
+          <div style="color:var(--text-muted);font-size:16px">›</div>
+        </a>
+      `).join('')}
+    </div>
+  `).join('');
 }

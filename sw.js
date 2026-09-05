@@ -16,6 +16,7 @@ const ASSETS = [
   './js/ai.js',
   './js/components/navbar.js',
   './js/components/modal.js',
+  './js/components/toast.js',
   './js/views/home.js',
   './js/views/chat.js',
   './js/views/agenda.js',

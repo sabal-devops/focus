@@ -1,6 +1,7 @@
 import * as db from '../db.js';
 import * as modal from '../components/modal.js';
 import { on } from '../store.js';
+import { show as toast } from '../components/toast.js';
 
 let unsub = null;
 let activeTab = 'eventi';
@@ -291,7 +292,14 @@ function bindEventListeners(container, store) {
   container.querySelectorAll('.delete-btn').forEach(el => {
     el.addEventListener('click', async (e) => {
       e.stopPropagation();
-      await db.del(el.dataset.store, Number(el.dataset.id));
+      const storeName = el.dataset.store;
+      const id = Number(el.dataset.id);
+      const item = await db.get(storeName, id);
+      if (!item) return;
+      const label = item.titolo || item.nome || 'elemento';
+      if (!confirm(`Eliminare "${label}"?`)) return;
+      await db.del(storeName, id);
+      toast(`${label} eliminato`);
       loadContent();
     });
   });

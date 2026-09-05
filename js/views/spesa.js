@@ -1,6 +1,7 @@
 import * as db from '../db.js';
 import * as modal from '../components/modal.js';
 import { on, emit } from '../store.js';
+import { show as toast } from '../components/toast.js';
 
 let unsub = null;
 let activeTab = 'lista';
@@ -28,9 +29,14 @@ function categorizeProduct(name) {
 export async function render(container) {
   container.innerHTML = `
     <div class="view-container">
-      <div class="view-header">
-        <h1>Spesa</h1>
-        <p id="spesa-subtitle"></p>
+      <div class="view-header" style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h1>Spesa</h1>
+          <p id="spesa-subtitle"></p>
+        </div>
+        <button id="share-spesa" class="btn-circle" style="margin-top:8px;background:var(--bg-card);border:1px solid var(--border)" title="Condividi lista">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
       </div>
       <div id="spesa-tabs" style="display:flex;gap:var(--space-xs);margin-bottom:var(--space-md)">
         <button class="spesa-tab active" data-tab="lista" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;background:var(--accent);color:#fff;border:none">Lista spesa</button>
@@ -53,6 +59,8 @@ export async function render(container) {
     if (activeTab === 'lista') openAddSpesa();
     else openAddDispensa();
   });
+
+  document.getElementById('share-spesa').addEventListener('click', shareList);
 
   unsub = on('data-changed', () => loadContent());
   await loadContent();
@@ -174,6 +182,7 @@ function bindListaListeners(container) {
 
       if (item.completato) {
         await autoAddToDispensa(item.nome, item.quantita);
+        toast(`${item.nome} completato e aggiunto in dispensa`);
       }
 
       emit('data-changed', { source: 'spesa' });
@@ -184,7 +193,10 @@ function bindListaListeners(container) {
   container.querySelectorAll('.delete-btn').forEach(el => {
     el.addEventListener('click', async (e) => {
       e.stopPropagation();
-      await db.del('spesa', Number(el.dataset.id));
+      const item = await db.get('spesa', Number(el.dataset.id));
+      if (!item || !confirm(`Rimuovere "${item.nome}" dalla lista?`)) return;
+      await db.del('spesa', item.id);
+      toast(`${item.nome} rimosso`);
       emit('data-changed', { source: 'spesa' });
       loadContent();
     });
@@ -309,6 +321,7 @@ function bindDispensaListeners(container) {
         nome: item.nome, quantita: null, unita: null,
         completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null
       });
+      toast(`${item.nome} aggiunto alla spesa`);
       emit('data-changed', { source: 'dispensa' });
       loadContent();
     });
@@ -383,6 +396,29 @@ async function editDispensaItem(id) {
   }, 100);
 }
 
+async function shareList() {
+  const items = await db.getAll('spesa');
+  const daComprare = items.filter(i => !i.completato);
+  if (daComprare.length === 0) {
+    toast('Lista vuota, niente da condividere');
+    return;
+  }
+  const text = 'Lista della spesa:\n' + daComprare.map(i => {
+    const qty = i.quantita ? ` (${i.quantita}${i.unita ? ' ' + i.unita : ''})` : '';
+    return `- ${i.nome}${qty}`;
+  }).join('\n');
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Lista della spesa', text });
+      toast('Lista condivisa!');
+    } catch {}
+  } else {
+    await navigator.clipboard.writeText(text);
+    toast('Lista copiata negli appunti!');
+  }
+}
+
 function openAddSpesa() {
   modal.open('Aggiungi alla spesa', `
     <form>
@@ -408,6 +444,7 @@ function openAddSpesa() {
         dataCompletato: null
       });
     }
+    toast(items.length === 1 ? `${items[0]} aggiunto alla spesa` : `${items.length} prodotti aggiunti`);
     emit('data-changed', { source: 'spesa' });
     loadContent();
   });
