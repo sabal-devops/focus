@@ -4,11 +4,25 @@ const ALL_STORES = ['messages', 'spesa', 'dispensa', 'transazioni', 'eventi', 's
 
 export async function render(container) {
   const ollamaUrl = await db.getSetting('ollama_url') || 'http://localhost:11434';
+  const sogliaSettimanale = await db.getSetting('soglia_settimanale') || '';
+  const sogliaMensile = await db.getSetting('soglia_mensile') || '';
 
   container.innerHTML = `
     <div class="view-container">
       <div class="view-header">
         <h1>Impostazioni</h1>
+      </div>
+
+      <div class="section-title">Notifiche spesa</div>
+      <div class="card">
+        <div class="form-group">
+          <label class="form-label">Soglia settimanale (€)</label>
+          <input type="number" id="soglia-week" class="input-field" value="${sogliaSettimanale}" placeholder="Es. 100">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Soglia mensile (€)</label>
+          <input type="number" id="soglia-month" class="input-field" value="${sogliaMensile}" placeholder="Es. 400">
+        </div>
       </div>
 
       <div class="section-title">Connessione AI</div>
@@ -43,11 +57,21 @@ export async function render(container) {
 
       <div class="section-title">Info</div>
       <div class="card">
-        <div class="item-subtitle">Focus v0.2.0</div>
+        <div class="item-subtitle">Focus v0.3.0</div>
         <div class="item-subtitle" style="margin-top:4px">Il tuo hub personale intelligente</div>
       </div>
     </div>
   `;
+
+  document.getElementById('soglia-week').addEventListener('change', async (e) => {
+    const val = parseFloat(e.target.value);
+    await db.setSetting('soglia_settimanale', val > 0 ? val : null);
+  });
+
+  document.getElementById('soglia-month').addEventListener('change', async (e) => {
+    const val = parseFloat(e.target.value);
+    await db.setSetting('soglia_mensile', val > 0 ? val : null);
+  });
 
   document.getElementById('ollama-url').addEventListener('change', async (e) => {
     await db.setSetting('ollama_url', e.target.value.trim());

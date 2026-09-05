@@ -2,7 +2,7 @@ const routes = {};
 let currentView = null;
 let currentPath = null;
 
-const NAV_ORDER = ['/', '/chat', '/agenda', '/finanze', '/altro', '/spesa', '/dispensa', '/settings'];
+const NAV_ORDER = ['/', '/chat', '/spesa', '/dispensa', '/agenda', '/finanze', '/settings'];
 
 function getNavIndex(path) {
   const idx = NAV_ORDER.indexOf(path);

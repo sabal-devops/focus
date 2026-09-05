@@ -360,11 +360,38 @@ function showSuggestionChips(messagesEl, input, form) {
   });
 }
 
+function formatBotText(text) {
+  return text
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/✅/g, '<span style="color:var(--success)">✅</span>')
+    .replace(/📅/g, '<span>📅</span>')
+    .replace(/💰/g, '<span>💰</span>')
+    .replace(/🛒/g, '<span>🛒</span>')
+    .replace(/(€[\d.,]+)/g, '<strong>$1</strong>');
+}
+
 function appendMessage(container, msg) {
   const div = document.createElement('div');
   const isUser = msg.sender === 'user';
   div.className = `chat-bubble ${isUser ? 'chat-bubble-user' : 'chat-bubble-bot'}`;
-  div.textContent = msg.text;
+  if (isUser) {
+    div.textContent = msg.text;
+  } else {
+    div.innerHTML = formatBotText(msg.text);
+  }
+  if (msg.actions && msg.actions.length > 0 && !isUser) {
+    const tags = document.createElement('div');
+    tags.className = 'chat-action-tags';
+    for (const a of msg.actions) {
+      const tag = document.createElement('span');
+      tag.className = 'chat-action-tag';
+      const icons = { spesa_add: '🛒', transazione: '💰', evento: '📅', scadenza: '⏰', dispensa_add: '🏠', dispensa_update: '🏠' };
+      tag.textContent = `${icons[a.type] || '✓'} ${a.item || a.descrizione || a.titolo || ''}`.trim();
+      tags.appendChild(tag);
+    }
+    div.appendChild(tags);
+  }
   container.appendChild(div);
 }
 

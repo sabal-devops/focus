@@ -65,6 +65,13 @@ export async function checkAndNotify() {
   const dayAfter = new Date(today);
   dayAfter.setDate(dayAfter.getDate() + 2);
 
+  await checkEvents(today, tomorrow, dayAfter);
+  await checkDeadlines(today);
+  await checkDispensa();
+  await checkSpending(today);
+}
+
+async function checkEvents(today, tomorrow, dayAfter) {
   const eventi = await db.getAll('eventi');
   for (const e of eventi) {
     const dates = expandRecurringDates(e, today, dayAfter);
@@ -82,7 +89,9 @@ export async function checkAndNotify() {
       }
     }
   }
+}
 
+async function checkDeadlines(today) {
   const scadenze = await db.getAll('scadenze');
   for (const s of scadenze) {
     if (s.completata) continue;
@@ -100,6 +109,69 @@ export async function checkAndNotify() {
     } else if (diff <= 7 && diff > 1 && !wasNotified(key + '_week')) {
       showNotification(`Scadenza tra ${diff} giorni`, `${s.titolo}${s.costo ? ' — €' + s.costo.toFixed(2) : ''}`);
       markNotified(key + '_week');
+    }
+  }
+}
+
+async function checkDispensa() {
+  const items = await db.getAll('dispensa');
+  const terminati = items.filter(i => i.quantita !== null && i.quantita <= 0);
+
+  if (terminati.length === 0) return;
+
+  const key = `dispensa_terminati_${new Date().toISOString().slice(0, 10)}`;
+  if (wasNotified(key)) return;
+
+  if (terminati.length === 1) {
+    showNotification('Prodotto finito', `${terminati[0].nome} è terminato — aggiungilo alla spesa!`);
+  } else {
+    const nomi = terminati.slice(0, 3).map(i => i.nome).join(', ');
+    const extra = terminati.length > 3 ? ` e altri ${terminati.length - 3}` : '';
+    showNotification(`${terminati.length} prodotti finiti`, `${nomi}${extra} — aggiungili alla spesa!`);
+  }
+  markNotified(key);
+}
+
+async function checkSpending(today) {
+  const transazioni = await db.getAll('transazioni');
+
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  if (weekStart > today) weekStart.setDate(weekStart.getDate() - 7);
+
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  let weekTotal = 0;
+  let monthTotal = 0;
+
+  for (const t of transazioni) {
+    if (t.tipo !== 'uscita') continue;
+    const d = new Date(t.data);
+    d.setHours(0, 0, 0, 0);
+    if (d >= monthStart && d <= today) {
+      monthTotal += Math.abs(t.importo);
+    }
+    if (d >= weekStart && d <= today) {
+      weekTotal += Math.abs(t.importo);
+    }
+  }
+
+  const sogliaSettimanale = await db.getSetting('soglia_settimanale');
+  const sogliaMensile = await db.getSetting('soglia_mensile');
+
+  if (sogliaSettimanale && weekTotal > sogliaSettimanale) {
+    const weekKey = `spending_week_${weekStart.toISOString().slice(0, 10)}`;
+    if (!wasNotified(weekKey)) {
+      showNotification('Soglia settimanale superata', `Hai speso €${weekTotal.toFixed(2)} questa settimana (soglia: €${sogliaSettimanale})`);
+      markNotified(weekKey);
+    }
+  }
+
+  if (sogliaMensile && monthTotal > sogliaMensile) {
+    const monthKey = `spending_month_${monthStart.toISOString().slice(0, 7)}`;
+    if (!wasNotified(monthKey)) {
+      showNotification('Soglia mensile superata', `Hai speso €${monthTotal.toFixed(2)} questo mese (soglia: €${sogliaMensile})`);
+      markNotified(monthKey);
     }
   }
 }
