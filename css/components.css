@@ -199,6 +199,7 @@
 }
 
 .fab:active { transform: scale(0.9); }
+.fab.fab-hidden { transform: translateY(120px); opacity: 0; pointer-events: none; }
 
 /* ─── Modal ─── */
 

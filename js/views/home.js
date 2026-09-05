@@ -51,6 +51,7 @@ export async function render(container) {
     showWelcomeCard();
   } else {
     await loadDashboard();
+    await checkSpendingAlerts();
   }
 }
 
@@ -327,4 +328,61 @@ async function runSearch(query, container) {
       `).join('')}
     </div>
   `).join('');
+}
+
+async function checkSpendingAlerts() {
+  const transazioni = await db.getAll('transazioni');
+  const now = new Date();
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  if (weekStart > today) weekStart.setDate(weekStart.getDate() - 7);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  let weekTotal = 0, monthTotal = 0;
+  for (const t of transazioni) {
+    if (t.tipo !== 'uscita') continue;
+    const d = new Date(t.data); d.setHours(0, 0, 0, 0);
+    if (d >= monthStart && d <= today) monthTotal += Math.abs(t.importo);
+    if (d >= weekStart && d <= today) weekTotal += Math.abs(t.importo);
+  }
+
+  const sogliaW = await db.getSetting('soglia_settimanale');
+  const sogliaM = await db.getSetting('soglia_mensile');
+
+  const alertsEl = document.getElementById('home-alerts');
+  if (!alertsEl) return;
+
+  const banners = [];
+  if (sogliaW && weekTotal > sogliaW) {
+    const pct = ((weekTotal / sogliaW) * 100).toFixed(0);
+    banners.push(`<div class="spending-alert" style="background:var(--danger-soft);border:1px solid var(--danger);border-radius:var(--radius-md);padding:14px var(--space-md);margin-bottom:var(--space-sm);display:flex;align-items:center;gap:12px">
+      <div style="font-size:20px">⚠️</div>
+      <div>
+        <div style="font-weight:700;color:var(--danger);font-size:var(--font-sm)">Soglia settimanale superata!</div>
+        <div style="font-size:var(--font-xs);color:var(--text-secondary);margin-top:2px">€${weekTotal.toFixed(2)} / €${sogliaW} (${pct}%)</div>
+      </div>
+    </div>`);
+  }
+  if (sogliaM && monthTotal > sogliaM) {
+    const pct = ((monthTotal / sogliaM) * 100).toFixed(0);
+    banners.push(`<div class="spending-alert" style="background:var(--danger-soft);border:1px solid var(--danger);border-radius:var(--radius-md);padding:14px var(--space-md);margin-bottom:var(--space-sm);display:flex;align-items:center;gap:12px">
+      <div style="font-size:20px">⚠️</div>
+      <div>
+        <div style="font-weight:700;color:var(--danger);font-size:var(--font-sm)">Soglia mensile superata!</div>
+        <div style="font-size:var(--font-xs);color:var(--text-secondary);margin-top:2px">€${monthTotal.toFixed(2)} / €${sogliaM} (${pct}%)</div>
+      </div>
+    </div>`);
+  }
+
+  if (banners.length > 0) {
+    const existing = alertsEl.innerHTML;
+    const hasNoAlerts = existing.includes('Tutto in ordine');
+    if (hasNoAlerts) {
+      alertsEl.innerHTML = banners.join('');
+    } else {
+      alertsEl.insertAdjacentHTML('afterbegin', banners.join(''));
+    }
+  }
 }

@@ -21,8 +21,20 @@ export async function render(container) {
     <button class="fab" id="finanze-add">+</button>
   `;
 
-  document.getElementById('finanze-add').addEventListener('click', openAddModal);
+  const fab = document.getElementById('finanze-add');
+  fab.addEventListener('click', openAddModal);
   unsub = on('data-changed', () => loadData());
+
+  let lastScroll = 0;
+  const viewEl = container.querySelector('.view-container');
+  if (viewEl) {
+    window.addEventListener('scroll', () => {
+      const st = window.scrollY || document.documentElement.scrollTop;
+      fab.classList.toggle('fab-hidden', st > lastScroll && st > 100);
+      lastScroll = st;
+    }, { passive: true });
+  }
+
   await loadData();
 }
 

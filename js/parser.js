@@ -73,6 +73,15 @@ function extractAmount(text) {
   return null;
 }
 
+function extractAllAmounts(text) {
+  let total = 0;
+  const digitMatches = text.matchAll(/(\d+[.,]?\d*)\s*(?:euro|€)/gi);
+  for (const m of digitMatches) total += parseFloat(m[1].replace(',', '.'));
+  const italianMatches = text.matchAll(/(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(?:euro|€)/gi);
+  for (const m of italianMatches) total += italianToNumber(m[1]) || 0;
+  return total > 0 ? total : null;
+}
+
 function extractQuantityAndName(text) {
   const trimmed = text.trim();
 
@@ -119,6 +128,8 @@ function cleanProductName(name) {
   return name
     .replace(/\b(?:comprat[oaie]|comperat[oaie]|comparat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
     .replace(/\b(?:ho|hai|ha|abbiamo|il|la|lo|le|li|i|gli|un|uno|una|del|della|dei|delle|degli|dello|al|alla|allo)\b/gi, '')
+    .replace(/^(?:di|da|per|con|a|su|in)\s+/i, '')
+    .replace(/\s+(?:di|da|per|con|a|su|in)$/i, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -142,29 +153,44 @@ const UNIT_WORDS = new Set([
 
 function extractSmartProducts(text) {
   let cleaned = text
-    .replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '')
-    .replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '')
-    .replace(/\b(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(?:euro|€)/gi, '')
-    .replace(/\bho\s+(?:comprato|comperat[oa]|comparat[oa]|preso|acquistato|speso)\b/gi, '')
+    .replace(/\bho\s+(?:comprato|comperato|comparato|preso|acquistato|speso)\b/gi, '')
     .replace(/\b(?:comprat[oaie]|comperat[oaie]|comparat[oaie]|pres[oaie]|acquistat[oaie])\b/gi, '')
-    .replace(/\b(?:per|a|da|al|alla|dal|dalla|allo|dello|della|nel|nella)\s*$/gi, '')
-    .replace(/\b(?:per|a|da)\s+$/gi, '')
     .trim();
 
   if (!cleaned) return [];
 
-  const items = cleaned
+  // Split on price boundaries: "banana a due euro TRE salciccia" → split before "tre"
+  // First, split on commas and "e"
+  let segments = cleaned
     .split(/\s*[,]\s+|\s+e\s+/)
     .map(s => s.trim())
-    .filter(s => s.length > 1 && s.length < 50);
+    .filter(s => s.length > 1);
 
-  return items.map(item => {
+  // Further split each segment on price-then-product boundaries
+  const refined = [];
+  for (const seg of segments) {
+    // Split on pattern: "price euro/€ NEXT_ITEM" where next item starts with a number or known word
+    const parts = seg.split(/(?:\d+[.,]?\d*\s*(?:euro|€)|(?:euro|€)\s*\d+[.,]?\d*|(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(?:euro|€))\s*/gi);
+    for (const p of parts) {
+      const trimmed = p.replace(/\s+(?:a|per)\s*$/i, '').trim();
+      if (trimmed.length > 1) refined.push(trimmed);
+    }
+  }
+
+  return refined.map(item => {
+    // Handle "quattro pacchi di pasta" → "4 pasta"
     const m = item.match(/^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(\w+)\s+di\s+(.+)$/i);
     if (m && UNIT_WORDS.has(m[2].toLowerCase())) {
       return `${m[1]} ${m[3]}`;
     }
     return item;
-  }).filter(s => isValidProductName(s.replace(/^\d+\s+/, '').replace(/^(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+/i, '')));
+  }).map(item => {
+    // Strip leading prepositions
+    return item.replace(/^(?:di|da|per|con|a)\s+/i, '');
+  }).filter(s => {
+    const nameOnly = s.replace(/^\d+\s+/, '').replace(/^(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+/i, '');
+    return isValidProductName(nameOnly);
+  });
 }
 
 function guessCategory(text) {
@@ -241,7 +267,7 @@ const PATTERNS = [
     async handler(m) {
       const fullText = m[1];
       const rawProducts = extractSmartProducts(fullText);
-      const amount = extractAmount(fullText);
+      const amount = extractAllAmounts(fullText) || extractAmount(fullText);
       const actions = [];
       const names = [];
 
@@ -269,6 +295,24 @@ const PATTERNS = [
       if (amount) parts.push(`€${amount.toFixed(2)} in uscite`);
       if (parts.length === 0) return null;
       return { actions, response: parts.join(' — ') + '.' };
+    }
+  },
+  {
+    name: 'prezzo_di_prodotto',
+    match: /^(\d+[.,]?\d*)\s*(?:euro|€)\s+di\s+(.+)$/i,
+    async handler(m) {
+      const amount = parseFloat(m[1].replace(',', '.'));
+      const product = cleanProductName(m[2].trim());
+      if (!isValidProductName(product)) return null;
+
+      await db.add('spesa', { nome: product, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
+      await addOrUpdateDispensa(product, null);
+      await db.add('transazioni', { importo: amount, tipo: 'uscita', categoria: guessCategory(product), descrizione: `Acquisto: ${product}`, data: new Date().toISOString() });
+
+      return {
+        actions: [{ type: 'spesa', item: product }, { type: 'transazione', amount }],
+        response: `Registrato: ${product} — €${amount.toFixed(2)}.`
+      };
     }
   },
   {
@@ -859,7 +903,7 @@ export async function parseMessage(text) {
   }
 
   if (looksLikePurchase(text)) {
-    const amount = extractAmount(text);
+    const amount = extractAllAmounts(text) || extractAmount(text);
     const products = extractSmartProducts(text);
     const actions = [];
     const names = [];

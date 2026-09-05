@@ -1,5 +1,6 @@
 import * as db from './db.js';
 import { show as toast } from './components/toast.js';
+import { emit } from './store.js';
 
 const NOTIFIED_KEY = 'focus_notified';
 
@@ -183,8 +184,7 @@ async function checkSpending(today) {
   if (sogliaSettimanale && weekTotal > sogliaSettimanale) {
     const weekKey = `spending_week_${weekStart.toISOString().slice(0, 10)}`;
     if (!wasNotified(weekKey)) {
-      notify('Soglia settimanale superata!', `Hai speso €${weekTotal.toFixed(2)} questa settimana (soglia: €${sogliaSettimanale})`);
-      toast(`Attenzione: soglia settimanale superata! €${weekTotal.toFixed(2)} / €${sogliaSettimanale}`);
+      notify('Soglia settimanale superata!', `€${weekTotal.toFixed(2)} / €${sogliaSettimanale} questa settimana`);
       markNotified(weekKey);
     }
   }
@@ -192,15 +192,15 @@ async function checkSpending(today) {
   if (sogliaMensile && monthTotal > sogliaMensile) {
     const monthKey = `spending_month_${monthStart.toISOString().slice(0, 7)}`;
     if (!wasNotified(monthKey)) {
-      notify('Soglia mensile superata!', `Hai speso €${monthTotal.toFixed(2)} questo mese (soglia: €${sogliaMensile})`);
-      toast(`Attenzione: soglia mensile superata! €${monthTotal.toFixed(2)} / €${sogliaMensile}`);
+      notify('Soglia mensile superata!', `€${monthTotal.toFixed(2)} / €${sogliaMensile} questo mese`);
       markNotified(monthKey);
     }
   }
 }
 
 function notify(title, body) {
-  toast(`${title}: ${body}`);
+  toast(`${title}: ${body}`, 5000);
+  emit('notification', { title, body });
 
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
