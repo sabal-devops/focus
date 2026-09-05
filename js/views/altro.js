@@ -1,5 +1,3 @@
-import { navigate } from '../router.js';
-
 const items = [
   { path: '/spesa', icon: '🛒', label: 'Lista spesa', desc: 'Prodotti da comprare' },
   { path: '/dispensa', icon: '🏠', label: 'Dispensa', desc: 'Inventario di casa' },

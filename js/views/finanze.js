@@ -5,6 +5,7 @@ import { on } from '../store.js';
 let unsub = null;
 
 const CATEGORIE = ['Alimentazione', 'Casa', 'Trasporti', 'Svago', 'Salute', 'Abbonamenti', 'Altro'];
+const MESI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
 
 export async function render(container) {
   container.innerHTML = `
@@ -14,6 +15,7 @@ export async function render(container) {
         <p id="finanze-periodo"></p>
       </div>
       <div id="finanze-summary"></div>
+      <div id="finanze-chart"></div>
       <div id="finanze-list"></div>
     </div>
     <button class="fab" id="finanze-add">+</button>
@@ -86,6 +88,8 @@ async function loadData() {
     ` : ''}
   `;
 
+  renderChart(all, now);
+
   const listEl = document.getElementById('finanze-list');
   const recenti = all.sort((a, b) => new Date(b.data) - new Date(a.data)).slice(0, 20);
 
@@ -120,6 +124,64 @@ async function loadData() {
   listEl.querySelectorAll('.list-item').forEach(el => {
     el.addEventListener('click', () => deleteTransaction(Number(el.dataset.id)));
   });
+}
+
+function renderChart(transactions, now) {
+  const chartEl = document.getElementById('finanze-chart');
+  if (!chartEl) return;
+
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ month: d.getMonth(), year: d.getFullYear(), label: MESI[d.getMonth()] });
+  }
+
+  const data = months.map(m => {
+    const mTx = transactions.filter(t => {
+      const d = new Date(t.data);
+      return d.getMonth() === m.month && d.getFullYear() === m.year;
+    });
+    return {
+      label: m.label,
+      uscite: mTx.filter(t => t.tipo === 'uscita').reduce((s, t) => s + t.importo, 0),
+      entrate: mTx.filter(t => t.tipo === 'entrata').reduce((s, t) => s + t.importo, 0),
+    };
+  });
+
+  const maxVal = Math.max(1, ...data.map(d => Math.max(d.uscite, d.entrate)));
+  const hasData = data.some(d => d.uscite > 0 || d.entrate > 0);
+
+  if (!hasData) {
+    chartEl.innerHTML = '';
+    return;
+  }
+
+  const barH = 120;
+
+  chartEl.innerHTML = `
+    <div class="card" style="margin-bottom:var(--space-md)">
+      <div class="card-header"><span class="card-title">Ultimi 6 mesi</span></div>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:${barH + 30}px;padding-top:var(--space-sm)">
+        ${data.map(d => {
+          const hU = d.uscite > 0 ? Math.max(4, (d.uscite / maxVal) * barH) : 0;
+          const hE = d.entrate > 0 ? Math.max(4, (d.entrate / maxVal) * barH) : 0;
+          return `
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div style="display:flex;gap:2px;align-items:flex-end;height:${barH}px">
+                <div style="width:12px;height:${hU}px;background:var(--danger);border-radius:3px 3px 0 0;transition:height 0.4s" title="Uscite: €${d.uscite.toFixed(2)}"></div>
+                <div style="width:12px;height:${hE}px;background:var(--success);border-radius:3px 3px 0 0;transition:height 0.4s" title="Entrate: €${d.entrate.toFixed(2)}"></div>
+              </div>
+              <span style="font-size:10px;color:var(--text-muted)">${d.label}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:var(--space-md);justify-content:center;margin-top:var(--space-sm)">
+        <span style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--danger);display:inline-block"></span>Uscite</span>
+        <span style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--success);display:inline-block"></span>Entrate</span>
+      </div>
+    </div>
+  `;
 }
 
 async function deleteTransaction(id) {

@@ -1,5 +1,7 @@
 import * as db from '../db.js';
 
+const ALL_STORES = ['messages', 'spesa', 'dispensa', 'transazioni', 'eventi', 'scadenze', 'impostazioni'];
+
 export async function render(container) {
   const ollamaUrl = await db.getSetting('ollama_url') || 'http://localhost:11434';
 
@@ -28,6 +30,12 @@ export async function render(container) {
         </button>
       </div>
       <div class="card">
+        <button id="import-data" class="btn btn-ghost" style="width:100%;justify-content:flex-start">
+          📥 Importa dati da backup
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
+      </div>
+      <div class="card">
         <button id="clear-data" class="btn btn-ghost" style="width:100%;justify-content:flex-start;color:var(--danger)">
           🗑 Cancella tutti i dati
         </button>
@@ -35,7 +43,7 @@ export async function render(container) {
 
       <div class="section-title">Info</div>
       <div class="card">
-        <div class="item-subtitle">Focus v0.1.0</div>
+        <div class="item-subtitle">Focus v0.2.0</div>
         <div class="item-subtitle" style="margin-top:4px">Il tuo hub personale intelligente</div>
       </div>
     </div>
@@ -47,6 +55,8 @@ export async function render(container) {
 
   document.getElementById('test-ollama').addEventListener('click', testOllama);
   document.getElementById('export-data').addEventListener('click', exportData);
+  document.getElementById('import-data').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', importData);
   document.getElementById('clear-data').addEventListener('click', clearAllData);
 }
 
@@ -70,29 +80,60 @@ async function testOllama() {
 }
 
 async function exportData() {
-  const data = {
-    messages: await db.getAll('messages'),
-    spesa: await db.getAll('spesa'),
-    dispensa: await db.getAll('dispensa'),
-    transazioni: await db.getAll('transazioni'),
-    exportedAt: new Date().toISOString()
-  };
+  const data = { exportedAt: new Date().toISOString(), version: 2 };
+  for (const store of ALL_STORES) {
+    data[store] = await db.getAll(store);
+  }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `nodo-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `focus-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    const stores = ALL_STORES.filter(s => Array.isArray(data[s]) && data[s].length > 0);
+    if (stores.length === 0) {
+      alert('Il file non contiene dati validi.');
+      return;
+    }
+
+    const count = stores.reduce((sum, s) => sum + data[s].length, 0);
+    if (!confirm(`Importare ${count} elementi da ${stores.length} sezioni?\n(${stores.join(', ')})\n\nI dati esistenti verranno mantenuti.`)) return;
+
+    let imported = 0;
+    for (const store of stores) {
+      for (const item of data[store]) {
+        delete item.id;
+        await db.add(store, item);
+        imported++;
+      }
+    }
+
+    alert(`Importati ${imported} elementi con successo.`);
+    window.location.reload();
+  } catch (err) {
+    alert('Errore durante l\'importazione: ' + err.message);
+  }
+
+  e.target.value = '';
 }
 
 async function clearAllData() {
   if (!confirm('Sei sicuro? Tutti i dati verranno cancellati permanentemente.')) return;
   if (!confirm('Conferma: cancellare TUTTO?')) return;
-  await db.clear('messages');
-  await db.clear('spesa');
-  await db.clear('dispensa');
-  await db.clear('transazioni');
+  for (const store of ALL_STORES) {
+    await db.clear(store);
+  }
   alert('Dati cancellati.');
   window.location.reload();
 }

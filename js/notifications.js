@@ -22,6 +22,30 @@ function wasNotified(key) {
   return !!getNotified()[key];
 }
 
+function nextOccurrence(date, tipo) {
+  const d = new Date(date);
+  switch (tipo) {
+    case 'settimanale': d.setDate(d.getDate() + 7); break;
+    case 'bisettimanale': d.setDate(d.getDate() + 14); break;
+    case 'mensile': d.setMonth(d.getMonth() + 1); break;
+    case 'annuale': d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return d;
+}
+
+function expandRecurringDates(event, today, dayAfter) {
+  const dates = [new Date(event.data)];
+  if (!event.ricorrenza) return dates;
+
+  let current = new Date(event.data);
+  for (let i = 0; i < 52; i++) {
+    current = nextOccurrence(current, event.ricorrenza);
+    if (current > dayAfter) break;
+    dates.push(new Date(current));
+  }
+  return dates;
+}
+
 export async function requestPermission() {
   if (!('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
@@ -43,16 +67,19 @@ export async function checkAndNotify() {
 
   const eventi = await db.getAll('eventi');
   for (const e of eventi) {
-    const d = new Date(e.data);
-    d.setHours(0, 0, 0, 0);
-    const key = `evento_${e.id}_${e.data}`;
+    const dates = expandRecurringDates(e, today, dayAfter);
+    for (const d of dates) {
+      d.setHours(0, 0, 0, 0);
+      const dateKey = d.toISOString().slice(0, 10);
+      const key = `evento_${e.id}_${dateKey}`;
 
-    if (d.getTime() === today.getTime() && !wasNotified(key)) {
-      showNotification('Evento oggi', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
-      markNotified(key);
-    } else if (d.getTime() === tomorrow.getTime() && !wasNotified(key + '_tomorrow')) {
-      showNotification('Evento domani', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
-      markNotified(key + '_tomorrow');
+      if (d.getTime() === today.getTime() && !wasNotified(key)) {
+        showNotification('Evento oggi', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
+        markNotified(key);
+      } else if (d.getTime() === tomorrow.getTime() && !wasNotified(key + '_tomorrow')) {
+        showNotification('Evento domani', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
+        markNotified(key + '_tomorrow');
+      }
     }
   }
 
@@ -82,14 +109,14 @@ function showNotification(title, body) {
     navigator.serviceWorker.ready.then(reg => {
       reg.showNotification(title, {
         body,
-        icon: './icons/icon-192.png',
-        badge: './icons/icon-192.png',
+        icon: './icons/icon-192.svg',
+        badge: './icons/icon-192.svg',
         tag: title + body,
         vibrate: [200, 100, 200]
       });
     });
   } else {
-    new Notification(title, { body, icon: './icons/icon-192.png' });
+    new Notification(title, { body, icon: './icons/icon-192.svg' });
   }
 }
 

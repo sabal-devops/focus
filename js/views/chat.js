@@ -8,6 +8,15 @@ let recognition = null;
 let isRecording = false;
 let ttsEnabled = true;
 
+export function destroy() {
+  if (recognition) {
+    try { recognition.abort(); } catch {}
+    recognition = null;
+  }
+  isRecording = false;
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
 export async function render(container) {
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   const hasSpeech = !!SpeechRec;

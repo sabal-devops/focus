@@ -5,6 +5,14 @@ import { on } from '../store.js';
 let unsub = null;
 let activeTab = 'eventi';
 
+const RICORRENZE = [
+  { value: '', label: 'Nessuna' },
+  { value: 'settimanale', label: 'Ogni settimana' },
+  { value: 'bisettimanale', label: 'Ogni 2 settimane' },
+  { value: 'mensile', label: 'Ogni mese' },
+  { value: 'annuale', label: 'Ogni anno' },
+];
+
 export async function render(container) {
   container.innerHTML = `
     <div class="view-container">
@@ -63,11 +71,62 @@ async function loadContent() {
   else await loadScadenze();
 }
 
+function expandRecurring(events) {
+  const expanded = [];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const horizon = new Date(now);
+  horizon.setMonth(horizon.getMonth() + 3);
+
+  for (const e of events) {
+    expanded.push(e);
+
+    if (!e.ricorrenza) continue;
+
+    const baseDate = new Date(e.data);
+    baseDate.setHours(0, 0, 0, 0);
+    let current = new Date(baseDate);
+
+    for (let i = 0; i < 52; i++) {
+      current = nextOccurrence(current, e.ricorrenza);
+      if (current > horizon) break;
+
+      const dateStr = current.toISOString().slice(0, 10);
+      const alreadyExists = events.some(ev =>
+        ev.titolo === e.titolo && ev.data === dateStr && ev.id !== e.id
+      );
+      if (alreadyExists) continue;
+
+      expanded.push({
+        ...e,
+        id: e.id,
+        data: dateStr,
+        _virtual: true,
+        _originId: e.id,
+      });
+    }
+  }
+
+  return expanded;
+}
+
+function nextOccurrence(date, tipo) {
+  const d = new Date(date);
+  switch (tipo) {
+    case 'settimanale': d.setDate(d.getDate() + 7); break;
+    case 'bisettimanale': d.setDate(d.getDate() + 14); break;
+    case 'mensile': d.setMonth(d.getMonth() + 1); break;
+    case 'annuale': d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return d;
+}
+
 async function loadEventi() {
   const contentEl = document.getElementById('agenda-content');
   if (!contentEl) return;
 
-  const eventi = await db.getAll('eventi');
+  const eventiRaw = await db.getAll('eventi');
+  const eventi = expandRecurring(eventiRaw);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -75,11 +134,11 @@ async function loadEventi() {
     .filter(e => new Date(e.data) >= now)
     .sort((a, b) => new Date(a.data) - new Date(b.data));
 
-  const passati = eventi
+  const passati = eventiRaw
     .filter(e => new Date(e.data) < now)
     .sort((a, b) => new Date(b.data) - new Date(a.data));
 
-  if (eventi.length === 0) {
+  if (eventiRaw.length === 0) {
     contentEl.innerHTML = `
       <div class="empty-state">
         <div class="icon">📅</div>
@@ -108,7 +167,8 @@ async function loadScadenze() {
   const contentEl = document.getElementById('agenda-content');
   if (!contentEl) return;
 
-  const scadenze = await db.getAll('scadenze');
+  const scadenzeRaw = await db.getAll('scadenze');
+  const scadenze = expandRecurringScadenze(scadenzeRaw);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -116,11 +176,11 @@ async function loadScadenze() {
     .filter(s => !s.completata)
     .sort((a, b) => new Date(a.data) - new Date(b.data));
 
-  const completate = scadenze
+  const completate = scadenzeRaw
     .filter(s => s.completata)
     .sort((a, b) => new Date(b.data) - new Date(a.data));
 
-  if (scadenze.length === 0) {
+  if (scadenzeRaw.length === 0) {
     contentEl.innerHTML = `
       <div class="empty-state">
         <div class="icon">📋</div>
@@ -145,6 +205,28 @@ async function loadScadenze() {
   bindEventListeners(contentEl, 'scadenze');
 }
 
+function expandRecurringScadenze(scadenze) {
+  const expanded = [];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const horizon = new Date(now);
+  horizon.setMonth(horizon.getMonth() + 3);
+
+  for (const s of scadenze) {
+    expanded.push(s);
+    if (!s.ricorrenza || s.completata) continue;
+
+    let current = new Date(s.data);
+    for (let i = 0; i < 24; i++) {
+      current = nextOccurrence(current, s.ricorrenza);
+      if (current > horizon) break;
+      const dateStr = current.toISOString().slice(0, 10);
+      expanded.push({ ...s, data: dateStr, _virtual: true, _originId: s.id, completata: false });
+    }
+  }
+  return expanded;
+}
+
 function eventoHTML(evento, passato = false) {
   const d = new Date(evento.data);
   const giorno = d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -152,17 +234,24 @@ function eventoHTML(evento, passato = false) {
   const icons = { appuntamento: '🏥', lavoro: '💼', personale: '👤', sport: '🏃', altro: '📌' };
   const icon = icons[evento.tipo] || '📌';
   const costo = evento.costo ? `€${evento.costo.toFixed(2)}` : '';
+  const ricBadge = evento.ricorrenza ? ricorrenzaBadge(evento.ricorrenza) : '';
+  const isVirtual = evento._virtual ? ' data-virtual="true"' : '';
 
   return `
-    <div class="list-item${passato ? ' checked' : ''}" data-id="${evento.id}" data-store="eventi">
+    <div class="list-item${passato ? ' checked' : ''}" data-id="${evento._originId || evento.id}" data-store="eventi"${isVirtual}>
       <div style="font-size:20px">${icon}</div>
       <div class="item-text">
-        <div class="item-title">${evento.titolo}</div>
+        <div class="item-title">${evento.titolo}${ricBadge}</div>
         <div class="item-subtitle">${giorno}${ora ? ' · ' + ora : ''}${evento.luogo ? ' · ' + evento.luogo : ''}${costo ? ' · <span style="color:var(--danger);font-weight:600">' + costo + '</span>' : ''}</div>
       </div>
-      <button class="btn btn-ghost btn-icon delete-btn" data-id="${evento.id}" data-store="eventi" style="font-size:16px;color:var(--text-muted)">✕</button>
+      ${!evento._virtual ? `<button class="btn btn-ghost btn-icon delete-btn" data-id="${evento.id}" data-store="eventi" style="font-size:16px;color:var(--text-muted)">✕</button>` : ''}
     </div>
   `;
+}
+
+function ricorrenzaBadge(tipo) {
+  const labels = { settimanale: '🔁 sett.', bisettimanale: '🔁 2 sett.', mensile: '🔁 mens.', annuale: '🔁 ann.' };
+  return ` <span style="font-size:10px;color:var(--accent-secondary);font-weight:400">${labels[tipo] || ''}</span>`;
 }
 
 function scadenzaHTML(scadenza, now) {
@@ -183,16 +272,17 @@ function scadenzaHTML(scadenza, now) {
   const catIcons = { documento: '📄', veicolo: '🚗', casa: '🏠', salute: '🏥', abbonamento: '📱', altro: '📋' };
   const icon = catIcons[scadenza.categoria] || '📋';
   const costo = scadenza.costo ? `€${scadenza.costo.toFixed(2)}` : '';
+  const ricBadge = scadenza.ricorrenza ? ricorrenzaBadge(scadenza.ricorrenza) : '';
 
   return `
-    <div class="list-item${scadenza.completata ? ' checked' : ''}" data-id="${scadenza.id}" data-store="scadenze">
-      <div class="check" data-id="${scadenza.id}" data-store="scadenze"></div>
+    <div class="list-item${scadenza.completata ? ' checked' : ''}" data-id="${scadenza._originId || scadenza.id}" data-store="scadenze"${scadenza._virtual ? ' data-virtual="true"' : ''}>
+      ${!scadenza._virtual ? `<div class="check" data-id="${scadenza.id}" data-store="scadenze"></div>` : '<div style="width:24px"></div>'}
       <div class="item-text">
-        <div class="item-title">${icon} ${scadenza.titolo}</div>
+        <div class="item-title">${icon} ${scadenza.titolo}${ricBadge}</div>
         <div class="item-subtitle">${giorno}${urgency ? ` · <span style="color:${urgencyColor};font-weight:600">${urgency}</span>` : ''}${costo ? ' · <span style="color:var(--danger)">' + costo + '</span>' : ''}</div>
         ${scadenza.descrizione ? `<div class="item-subtitle">${scadenza.descrizione}</div>` : ''}
       </div>
-      <button class="btn btn-ghost btn-icon delete-btn" data-id="${scadenza.id}" data-store="scadenze" style="font-size:16px;color:var(--text-muted)">✕</button>
+      ${!scadenza._virtual ? `<button class="btn btn-ghost btn-icon delete-btn" data-id="${scadenza.id}" data-store="scadenze" style="font-size:16px;color:var(--text-muted)">✕</button>` : ''}
     </div>
   `;
 }
@@ -221,13 +311,24 @@ function bindEventListeners(container, store) {
   }
 
   if (store === 'eventi') {
-    container.querySelectorAll('.list-item[data-store="eventi"]').forEach(el => {
+    container.querySelectorAll('.list-item[data-store="eventi"]:not([data-virtual="true"])').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('.delete-btn')) return;
         editEvento(Number(el.dataset.id));
       });
     });
   }
+}
+
+function ricorrenzaSelect(selected) {
+  return `
+    <div class="form-group">
+      <label class="form-label">Ricorrenza</label>
+      <select name="ricorrenza" class="input-field">
+        ${RICORRENZE.map(r => `<option value="${r.value}"${r.value === (selected || '') ? ' selected' : ''}>${r.label}</option>`).join('')}
+      </select>
+    </div>
+  `;
 }
 
 async function editEvento(id) {
@@ -256,6 +357,11 @@ async function editEvento(id) {
         <label class="form-label">Costo (€, opzionale)</label>
         <input type="number" step="0.01" name="costo" class="input-field" value="${evento.costo || ''}" placeholder="0.00">
       </div>
+      ${ricorrenzaSelect(evento.ricorrenza)}
+      <div class="form-group">
+        <label class="form-label">Note (opzionale)</label>
+        <input type="text" name="note" class="input-field" value="${evento.note || ''}" placeholder="Appunti...">
+      </div>
       <div class="form-group">
         <label class="form-label">Tipo</label>
         <select name="tipo" class="input-field">
@@ -276,6 +382,8 @@ async function editEvento(id) {
     evento.luogo = data.luogo || null;
     evento.tipo = data.tipo;
     evento.costo = newCosto;
+    evento.ricorrenza = data.ricorrenza || null;
+    evento.note = data.note || null;
     await db.put('eventi', evento);
 
     if (newCosto && newCosto !== oldCosto) {
@@ -315,6 +423,11 @@ function openAddEvento() {
         <label class="form-label">Costo (€, opzionale)</label>
         <input type="number" step="0.01" name="costo" class="input-field" placeholder="0.00">
       </div>
+      ${ricorrenzaSelect()}
+      <div class="form-group">
+        <label class="form-label">Note (opzionale)</label>
+        <input type="text" name="note" class="input-field" placeholder="Appunti...">
+      </div>
       <div class="form-group">
         <label class="form-label">Tipo</label>
         <select name="tipo" class="input-field">
@@ -336,7 +449,8 @@ function openAddEvento() {
       luogo: data.luogo || null,
       tipo: data.tipo,
       costo: costo,
-      note: null
+      ricorrenza: data.ricorrenza || null,
+      note: data.note || null
     });
 
     if (costo) {
@@ -378,6 +492,7 @@ function openAddScadenza() {
         <label class="form-label">Costo (€, opzionale)</label>
         <input type="number" step="0.01" name="costo" class="input-field" placeholder="0.00">
       </div>
+      ${ricorrenzaSelect()}
       <div class="form-group">
         <label class="form-label">Note (opzionale)</label>
         <input type="text" name="descrizione" class="input-field" placeholder="Es. Portare fototessera">
@@ -392,6 +507,7 @@ function openAddScadenza() {
       descrizione: data.descrizione || null,
       categoria: data.categoria,
       costo: costo,
+      ricorrenza: data.ricorrenza || null,
       completata: false
     });
 

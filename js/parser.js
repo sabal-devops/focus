@@ -474,6 +474,74 @@ const PATTERNS = [
     }
   },
   {
+    name: 'ricorrenza_settimanale',
+    match: /ogni\s+(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica)\s+(?:ho |c'e' |c'è |devo andare |vado )?(?:il |la |lo |l'|un |una |al |alla |dal |dalla |dallo |dall')?([\w\s]+?)(?:\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?))?(?:\s+(?:e )?(?:pago|costa|costo|spendo)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento)\s*(?:euro|€))?$/i,
+    async handler(m) {
+      const giorno = m[1].trim();
+      let titolo = m[2].trim();
+      const ora = m[3] ? m[3].replace('.', ':') : null;
+      const costoRaw = m[4] || null;
+      const costo = costoRaw ? italianToNumber(costoRaw) : null;
+
+      titolo = titolo.replace(/\s+(?:e )?(?:pago|costa|costo|spendo).*$/i, '').trim();
+      const data = parseItalianDate(giorno);
+      if (!data || !titolo) return null;
+
+      await db.add('eventi', {
+        titolo, data: data.toISOString().slice(0, 10), ora: ora || null,
+        luogo: null, tipo: guessEventType(titolo), costo: costo || null,
+        ricorrenza: 'settimanale', note: null
+      });
+
+      if (costo) {
+        await db.add('transazioni', {
+          importo: costo, tipo: 'uscita', categoria: guessCategory(titolo),
+          descrizione: titolo, data: data.toISOString()
+        });
+      }
+
+      const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+      const parts = [`Evento ricorrente: "${titolo}" ogni ${giorno}, dal ${giornoStr}`];
+      if (ora) parts[0] += ` alle ${ora}`;
+      if (costo) parts.push(`€${costo.toFixed(2)} a settimana`);
+      return { actions: [{ type: 'evento', item: titolo }], response: parts.join('. ') + '.' };
+    }
+  },
+  {
+    name: 'ricorrenza_mensile',
+    match: /ogni\s+mese\s+(?:il\s+)?(\d{1,2})?\s*(?:ho |c'e' |c'è |devo |)?(?:il |la |lo |l'|un |una |al |alla |dal |dalla |dallo |dall')?([\w\s]+?)(?:\s+(?:e )?(?:pago|costa|costo|spendo)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento)\s*(?:euro|€))?$/i,
+    async handler(m) {
+      const giornoMese = m[1] ? parseInt(m[1]) : new Date().getDate();
+      let titolo = m[2].trim();
+      const costoRaw = m[3] || null;
+      const costo = costoRaw ? italianToNumber(costoRaw) : null;
+
+      titolo = titolo.replace(/\s+(?:e )?(?:pago|costa|costo|spendo).*$/i, '').trim();
+      if (!titolo) return null;
+
+      const now = new Date();
+      let data = new Date(now.getFullYear(), now.getMonth(), giornoMese);
+      if (data < now) data.setMonth(data.getMonth() + 1);
+
+      await db.add('eventi', {
+        titolo, data: data.toISOString().slice(0, 10), ora: null,
+        luogo: null, tipo: guessEventType(titolo), costo: costo || null,
+        ricorrenza: 'mensile', note: null
+      });
+
+      if (costo) {
+        await db.add('transazioni', {
+          importo: costo, tipo: 'uscita', categoria: guessCategory(titolo),
+          descrizione: titolo, data: data.toISOString()
+        });
+      }
+
+      const parts = [`Evento ricorrente: "${titolo}" ogni mese il ${giornoMese}`];
+      if (costo) parts.push(`€${costo.toFixed(2)} al mese`);
+      return { actions: [{ type: 'evento', item: titolo }], response: parts.join('. ') + '.' };
+    }
+  },
+  {
     name: 'evento_con_data_e_prezzo',
     match: /(?:(?:il\s+)?(?:giorno\s+)?)?(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s*(\d{4})?\s+(?:ho |c'e' |c'è |devo andare |vado )?\s*(?:un |una |il |la |lo |l'|al |alla |dal |dalla |dallo |dall')?(.+?)(?:\s+(?:alle?\s+)?(\d{1,2}(?:[:.]\d{2})?))?(?:\s+(?:e )?(?:pago|costa|costo|spendo|spesa di|prezzo)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|venti|trenta|quaranta|cinquanta|cento)\s*(?:euro|€))?$/i,
     async handler(m) {

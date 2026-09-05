@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "nodo-dev",
+      "name": "focus-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "C:\\GIT\\nodo", "-l", "3000", "--no-clipboard"],
+      "runtimeArgs": ["serve", "C:\\GIT\\focus", "-l", "3000", "--no-clipboard"],
       "port": 3000
     }
   ]
