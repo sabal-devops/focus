@@ -27,8 +27,15 @@ export async function render(container) {
         </div>
       </div>
 
-      <div class="section-title">Notifiche spesa</div>
+      <div class="section-title">Notifiche</div>
       <div class="card">
+        <div class="form-group">
+          <label class="form-label">Permesso notifiche</label>
+          <div style="display:flex;align-items:center;gap:var(--space-sm)">
+            <button id="notif-perm" class="btn btn-primary" style="flex:1">Attiva notifiche</button>
+            <span id="notif-status" style="font-size:var(--font-sm)"></span>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label">Soglia settimanale (€)</label>
           <input type="number" id="soglia-week" class="input-field" value="${sogliaSettimanale}" placeholder="Es. 100">
@@ -95,6 +102,37 @@ export async function render(container) {
     if (btn.classList.contains('active')) {
       btn.style.background = 'var(--accent)';
       btn.style.color = '#fff';
+    }
+  });
+
+  const notifBtn = document.getElementById('notif-perm');
+  const notifStatus = document.getElementById('notif-status');
+  function updateNotifUI() {
+    if (!('Notification' in window)) {
+      notifBtn.style.display = 'none';
+      notifStatus.textContent = 'Non supportate';
+      notifStatus.style.color = 'var(--text-muted)';
+    } else if (Notification.permission === 'granted') {
+      notifBtn.textContent = 'Attive';
+      notifBtn.disabled = true;
+      notifBtn.style.opacity = '0.6';
+      notifStatus.textContent = '✓';
+      notifStatus.style.color = 'var(--success)';
+    } else if (Notification.permission === 'denied') {
+      notifBtn.textContent = 'Bloccate';
+      notifBtn.disabled = true;
+      notifBtn.style.opacity = '0.6';
+      notifStatus.textContent = 'Vai in Impostazioni > Safari per abilitare';
+      notifStatus.style.color = 'var(--danger)';
+    }
+  }
+  updateNotifUI();
+  notifBtn.addEventListener('click', async () => {
+    const result = await Notification.requestPermission();
+    updateNotifUI();
+    if (result === 'granted') {
+      const { checkAndNotify } = await import('../notifications.js');
+      checkAndNotify();
     }
   });
 

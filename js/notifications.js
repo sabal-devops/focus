@@ -1,4 +1,5 @@
 import * as db from './db.js';
+import { show as toast } from './components/toast.js';
 
 const NOTIFIED_KEY = 'focus_notified';
 
@@ -55,8 +56,6 @@ export async function requestPermission() {
 }
 
 export async function checkAndNotify() {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-
   const now = new Date();
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
@@ -71,6 +70,19 @@ export async function checkAndNotify() {
   await checkSpending(today);
 }
 
+export async function checkOnDataChange(source) {
+  const now = new Date();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  if (source === 'spesa' || source === 'dispensa' || source === 'chat') {
+    await checkDispensa();
+  }
+  if (source === 'transazione' || source === 'chat') {
+    await checkSpending(today);
+  }
+}
+
 async function checkEvents(today, tomorrow, dayAfter) {
   const eventi = await db.getAll('eventi');
   for (const e of eventi) {
@@ -81,10 +93,10 @@ async function checkEvents(today, tomorrow, dayAfter) {
       const key = `evento_${e.id}_${dateKey}`;
 
       if (d.getTime() === today.getTime() && !wasNotified(key)) {
-        showNotification('Evento oggi', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
+        notify('Evento oggi', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
         markNotified(key);
       } else if (d.getTime() === tomorrow.getTime() && !wasNotified(key + '_tomorrow')) {
-        showNotification('Evento domani', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
+        notify('Evento domani', `${e.titolo}${e.ora ? ' alle ' + e.ora : ''}${e.costo ? ' — €' + e.costo.toFixed(2) : ''}`);
         markNotified(key + '_tomorrow');
       }
     }
@@ -101,13 +113,13 @@ async function checkDeadlines(today) {
     const key = `scadenza_${s.id}_${s.data}`;
 
     if (diff <= 0 && !wasNotified(key + '_expired')) {
-      showNotification('Scadenza passata!', `${s.titolo} — scaduta${s.costo ? ', €' + s.costo.toFixed(2) : ''}`);
+      notify('Scadenza passata!', `${s.titolo} — scaduta${s.costo ? ', €' + s.costo.toFixed(2) : ''}`);
       markNotified(key + '_expired');
     } else if (diff === 1 && !wasNotified(key + '_tomorrow')) {
-      showNotification('Scadenza domani', `${s.titolo}${s.costo ? ' — €' + s.costo.toFixed(2) : ''}`);
+      notify('Scadenza domani', `${s.titolo}${s.costo ? ' — €' + s.costo.toFixed(2) : ''}`);
       markNotified(key + '_tomorrow');
     } else if (diff <= 7 && diff > 1 && !wasNotified(key + '_week')) {
-      showNotification(`Scadenza tra ${diff} giorni`, `${s.titolo}${s.costo ? ' — €' + s.costo.toFixed(2) : ''}`);
+      notify(`Scadenza tra ${diff} giorni`, `${s.titolo}${s.costo ? ' — €' + s.costo.toFixed(2) : ''}`);
       markNotified(key + '_week');
     }
   }
@@ -116,20 +128,29 @@ async function checkDeadlines(today) {
 async function checkDispensa() {
   const items = await db.getAll('dispensa');
   const terminati = items.filter(i => i.quantita !== null && i.quantita <= 0);
+  const scorteBasse = items.filter(i => i.quantita !== null && i.quantita > 0 && i.quantita <= 1);
 
-  if (terminati.length === 0) return;
-
-  const key = `dispensa_terminati_${new Date().toISOString().slice(0, 10)}`;
-  if (wasNotified(key)) return;
-
-  if (terminati.length === 1) {
-    showNotification('Prodotto finito', `${terminati[0].nome} è terminato — aggiungilo alla spesa!`);
-  } else {
-    const nomi = terminati.slice(0, 3).map(i => i.nome).join(', ');
-    const extra = terminati.length > 3 ? ` e altri ${terminati.length - 3}` : '';
-    showNotification(`${terminati.length} prodotti finiti`, `${nomi}${extra} — aggiungili alla spesa!`);
+  if (terminati.length > 0) {
+    const key = `dispensa_terminati_${new Date().toISOString().slice(0, 10)}`;
+    if (!wasNotified(key)) {
+      const nomi = terminati.slice(0, 3).map(i => i.nome).join(', ');
+      const extra = terminati.length > 3 ? ` e altri ${terminati.length - 3}` : '';
+      notify(
+        terminati.length === 1 ? 'Prodotto finito' : `${terminati.length} prodotti finiti`,
+        `${nomi}${extra} — aggiungili alla spesa!`
+      );
+      markNotified(key);
+    }
   }
-  markNotified(key);
+
+  if (scorteBasse.length > 0) {
+    const key = `dispensa_basse_${new Date().toISOString().slice(0, 10)}`;
+    if (!wasNotified(key)) {
+      const nomi = scorteBasse.map(i => i.nome).join(', ');
+      toast(`Scorte basse: ${nomi}`);
+      markNotified(key);
+    }
+  }
 }
 
 async function checkSpending(today) {
@@ -162,7 +183,8 @@ async function checkSpending(today) {
   if (sogliaSettimanale && weekTotal > sogliaSettimanale) {
     const weekKey = `spending_week_${weekStart.toISOString().slice(0, 10)}`;
     if (!wasNotified(weekKey)) {
-      showNotification('Soglia settimanale superata', `Hai speso €${weekTotal.toFixed(2)} questa settimana (soglia: €${sogliaSettimanale})`);
+      notify('Soglia settimanale superata!', `Hai speso €${weekTotal.toFixed(2)} questa settimana (soglia: €${sogliaSettimanale})`);
+      toast(`Attenzione: soglia settimanale superata! €${weekTotal.toFixed(2)} / €${sogliaSettimanale}`);
       markNotified(weekKey);
     }
   }
@@ -170,29 +192,34 @@ async function checkSpending(today) {
   if (sogliaMensile && monthTotal > sogliaMensile) {
     const monthKey = `spending_month_${monthStart.toISOString().slice(0, 7)}`;
     if (!wasNotified(monthKey)) {
-      showNotification('Soglia mensile superata', `Hai speso €${monthTotal.toFixed(2)} questo mese (soglia: €${sogliaMensile})`);
+      notify('Soglia mensile superata!', `Hai speso €${monthTotal.toFixed(2)} questo mese (soglia: €${sogliaMensile})`);
+      toast(`Attenzione: soglia mensile superata! €${monthTotal.toFixed(2)} / €${sogliaMensile}`);
       markNotified(monthKey);
     }
   }
 }
 
-function showNotification(title, body) {
+function notify(title, body) {
+  toast(`${title}: ${body}`);
+
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.ready.then(reg => {
       reg.showNotification(title, {
         body,
         icon: './icons/icon-192.svg',
         badge: './icons/icon-192.svg',
-        tag: title + body,
+        tag: title,
         vibrate: [200, 100, 200]
       });
     });
   } else {
-    new Notification(title, { body, icon: './icons/icon-192.svg' });
+    try { new Notification(title, { body, icon: './icons/icon-192.svg' }); } catch {}
   }
 }
 
-export function startPeriodicCheck(intervalMs = 3600000) {
+export function startPeriodicCheck(intervalMs = 1800000) {
   checkAndNotify();
   setInterval(checkAndNotify, intervalMs);
 }

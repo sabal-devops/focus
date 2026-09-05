@@ -41,9 +41,13 @@ async function boot() {
 
   initRouter();
 
-  const { requestPermission, startPeriodicCheck } = await import('./notifications.js' + V);
-  const granted = await requestPermission();
-  if (granted) startPeriodicCheck();
+  const { startPeriodicCheck, checkOnDataChange } = await import('./notifications.js' + V);
+  startPeriodicCheck();
+
+  const { on } = await import('./store.js' + V);
+  on('data-changed', (detail) => {
+    checkOnDataChange(detail?.source || 'unknown');
+  });
 }
 
 if ('serviceWorker' in navigator) {
