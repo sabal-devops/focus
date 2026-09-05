@@ -516,7 +516,7 @@ const PATTERNS = [
       const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: anno !== new Date().getFullYear() ? 'numeric' : undefined });
       const parts = [`Segnato: "${titolo}" — ${giornoStr}`];
       if (ora) parts[0] += ` alle ${ora}`;
-      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata.`);
+      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata`);
 
       return {
         actions: [{ type: 'evento', item: titolo }],
@@ -561,7 +561,7 @@ const PATTERNS = [
       const giornoStr = data.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
       const parts = [`Segnato: "${titolo}" — ${giornoStr}`];
       if (ora) parts[0] += ` alle ${ora}`;
-      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata.`);
+      if (costo) parts.push(`Spesa di €${costo.toFixed(2)} registrata`);
 
       return {
         actions: [{ type: 'evento', item: titolo }],
