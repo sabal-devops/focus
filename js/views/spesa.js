@@ -39,7 +39,8 @@ export async function render(container) {
         </button>
       </div>
       <div id="spesa-tabs" style="display:flex;gap:var(--space-xs);margin-bottom:var(--space-md)">
-        <button class="spesa-tab active" data-tab="lista" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;background:var(--accent);color:#fff;border:none">Lista spesa</button>
+        <button class="spesa-tab active" data-tab="lista" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;background:var(--accent);color:#fff;border:none">Lista</button>
+        <button class="spesa-tab" data-tab="catalogo" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;background:var(--bg-card);color:var(--text-secondary);border:1px solid var(--border-light)">Catalogo</button>
         <button class="spesa-tab" data-tab="dispensa" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;background:var(--bg-card);color:var(--text-secondary);border:1px solid var(--border-light)">Dispensa</button>
       </div>
       <div id="spesa-content"></div>
@@ -86,6 +87,7 @@ function updateTabs(container) {
 
 async function loadContent() {
   if (activeTab === 'lista') await loadLista();
+  else if (activeTab === 'catalogo') await loadCatalogo();
   else await loadDispensa();
 }
 
@@ -394,6 +396,92 @@ async function editDispensaItem(id) {
       });
     }
   }, 100);
+}
+
+const CATALOG = {
+  'Frutta e Verdura': ['Banane','Mele','Arance','Limoni','Fragole','Pere','Pomodori','Patate','Cipolle','Carote','Zucchine','Insalata','Peperoni','Melanzane','Aglio'],
+  'Latticini e Uova': ['Latte','Yogurt','Mozzarella','Formaggio','Burro','Uova','Panna','Ricotta','Parmigiano'],
+  'Carne e Pesce': ['Pollo','Carne macinata','Tonno','Salmone','Prosciutto','Pancetta','Salsicce','Bresaola'],
+  'Pane e Pasta': ['Pane','Pasta','Riso','Farina','Biscotti','Cereali','Cracker','Pizza'],
+  'Bevande': ['Acqua','Latte','Succo','Birra','Vino','Caffe','Te'],
+  'Dolci e Snack': ['Cioccolato','Nutella','Gelato','Marmellata','Miele','Patatine'],
+  'Casa e Igiene': ['Detersivo','Sapone','Shampoo','Carta igienica','Scottex','Dentifricio','Bagnoschiuma','Fazzoletti'],
+};
+
+const catIcons = {
+  'Frutta e Verdura': '🥬', 'Latticini e Uova': '🥛', 'Carne e Pesce': '🥩',
+  'Pane e Pasta': '🍞', 'Bevande': '🥤', 'Dolci e Snack': '🍫',
+  'Casa e Igiene': '🧴',
+};
+
+async function loadCatalogo() {
+  const contentEl = document.getElementById('spesa-content');
+  const subtitleEl = document.getElementById('spesa-subtitle');
+  if (!contentEl) return;
+
+  const spesaItems = await db.getAll('spesa');
+  const dispensaItems = await db.getAll('dispensa');
+
+  const inLista = new Set(spesaItems.filter(i => !i.completato).map(i => i.nome.toLowerCase()));
+  const inDispensa = new Map();
+  for (const d of dispensaItems) {
+    inDispensa.set(d.nome.toLowerCase(), d);
+  }
+
+  subtitleEl.textContent = 'Tocca per aggiungere alla lista';
+  contentEl.innerHTML = '';
+
+  for (const [cat, products] of Object.entries(CATALOG)) {
+    const icon = catIcons[cat] || '📦';
+    contentEl.innerHTML += `<div class="section-title" style="display:flex;align-items:center;gap:6px"><span>${icon}</span> ${cat}</div>`;
+
+    contentEl.innerHTML += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--space-sm)">
+      ${products.map(p => {
+        const norm = p.toLowerCase();
+        const alreadyInList = inLista.has(norm);
+        const dispItem = [...inDispensa.entries()].find(([k]) => k === norm || norm.includes(k) || k.includes(norm));
+        const inDisp = dispItem ? dispItem[1] : null;
+        const terminated = inDisp && inDisp.quantita !== null && inDisp.quantita <= 0;
+        const low = inDisp && inDisp.quantita !== null && inDisp.quantita > 0 && inDisp.quantita <= 1;
+
+        let style = 'background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-light)';
+        let badge = '';
+        if (alreadyInList) {
+          style = 'background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)';
+          badge = ' ✓';
+        } else if (terminated) {
+          style = 'background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger)';
+          badge = ' !';
+        } else if (low) {
+          style = 'background:var(--warning-soft);color:var(--warning);border:1px solid var(--warning)';
+          badge = ' ~';
+        }
+
+        return `<button class="catalog-item" data-nome="${p}" style="padding:8px 14px;border-radius:var(--radius-full);font-size:var(--font-sm);font-weight:500;cursor:pointer;transition:all 0.15s;${style}">${p}${badge}</button>`;
+      }).join('')}
+    </div>`;
+  }
+
+  contentEl.querySelectorAll('.catalog-item').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const nome = btn.dataset.nome;
+      const existing = (await db.getAll('spesa')).find(i => !i.completato && i.nome.toLowerCase() === nome.toLowerCase());
+      if (existing) {
+        toast(`${nome} è già nella lista`);
+        return;
+      }
+      await db.add('spesa', {
+        nome, quantita: null, unita: null,
+        completato: false, dataAggiunta: new Date().toISOString(), dataCompletato: null
+      });
+      toast(`${nome} aggiunto alla spesa`);
+      btn.style.background = 'var(--accent-soft)';
+      btn.style.color = 'var(--accent)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.textContent = nome + ' ✓';
+      emit('data-changed', { source: 'spesa' });
+    });
+  });
 }
 
 async function shareList() {

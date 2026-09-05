@@ -53,9 +53,21 @@ async function loadData() {
     perCategoria[cat] = (perCategoria[cat] || 0) + t.importo;
   }
 
+  const giorniPassati = now.getDate();
+  const mediaGiorno = giorniPassati > 0 ? totaleUscite / giorniPassati : 0;
+
+  const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+  const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const mesePrecedente = all.filter(t => {
+    const d = new Date(t.data);
+    return t.tipo === 'uscita' && d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+  });
+  const totalePrev = mesePrecedente.reduce((s, t) => s + t.importo, 0);
+  const diffPct = totalePrev > 0 ? ((totaleUscite / totalePrev - 1) * 100) : 0;
+
   const summaryEl = document.getElementById('finanze-summary');
   summaryEl.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-bottom:var(--space-md)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-bottom:var(--space-sm)">
       <div class="card">
         <div class="item-subtitle">Uscite</div>
         <div class="item-title" style="font-size:var(--font-xl);color:var(--danger)">-€${totaleUscite.toFixed(2)}</div>
@@ -63,6 +75,18 @@ async function loadData() {
       <div class="card">
         <div class="item-subtitle">Entrate</div>
         <div class="item-title" style="font-size:var(--font-xl);color:var(--success)">+€${totaleEntrate.toFixed(2)}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-bottom:var(--space-md)">
+      <div class="card">
+        <div class="item-subtitle">Media/giorno</div>
+        <div class="item-title" style="font-size:var(--font-lg)">€${mediaGiorno.toFixed(2)}</div>
+      </div>
+      <div class="card">
+        <div class="item-subtitle">vs mese scorso</div>
+        <div class="item-title" style="font-size:var(--font-lg);color:${diffPct > 0 ? 'var(--danger)' : diffPct < 0 ? 'var(--success)' : 'var(--text-primary)'}">
+          ${totalePrev > 0 ? (diffPct > 0 ? '+' : '') + diffPct.toFixed(0) + '%' : '—'}
+        </div>
       </div>
     </div>
     ${Object.keys(perCategoria).length > 0 ? `

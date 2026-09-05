@@ -7,10 +7,24 @@ export async function render(container) {
   const sogliaSettimanale = await db.getSetting('soglia_settimanale') || '';
   const sogliaMensile = await db.getSetting('soglia_mensile') || '';
 
+  const currentTheme = localStorage.getItem('focus_theme') || 'auto';
+
   container.innerHTML = `
     <div class="view-container">
       <div class="view-header">
         <h1>Impostazioni</h1>
+      </div>
+
+      <div class="section-title">Aspetto</div>
+      <div class="card">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Tema</label>
+          <div id="theme-btns" style="display:flex;gap:var(--space-xs)">
+            <button class="theme-btn${currentTheme === 'auto' ? ' active' : ''}" data-theme="auto" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;border:1px solid var(--border-light)">Auto</button>
+            <button class="theme-btn${currentTheme === 'light' ? ' active' : ''}" data-theme="light" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;border:1px solid var(--border-light)">Chiaro</button>
+            <button class="theme-btn${currentTheme === 'dark' ? ' active' : ''}" data-theme="dark" style="flex:1;padding:10px;border-radius:var(--radius-md);font-weight:600;font-size:var(--font-sm);transition:all 0.2s;border:1px solid var(--border-light)">Scuro</button>
+          </div>
+        </div>
       </div>
 
       <div class="section-title">Notifiche spesa</div>
@@ -57,11 +71,32 @@ export async function render(container) {
 
       <div class="section-title">Info</div>
       <div class="card">
-        <div class="item-subtitle">Focus v0.3.0</div>
+        <div class="item-subtitle">Focus v0.4.0</div>
         <div class="item-subtitle" style="margin-top:4px">Il tuo hub personale intelligente</div>
       </div>
     </div>
   `;
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const theme = btn.dataset.theme;
+      localStorage.setItem('focus_theme', theme);
+      if (theme === 'auto') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+      document.querySelectorAll('.theme-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.theme === theme);
+        b.style.background = b.dataset.theme === theme ? 'var(--accent)' : '';
+        b.style.color = b.dataset.theme === theme ? '#fff' : '';
+      });
+    });
+    if (btn.classList.contains('active')) {
+      btn.style.background = 'var(--accent)';
+      btn.style.color = '#fff';
+    }
+  });
 
   document.getElementById('soglia-week').addEventListener('change', async (e) => {
     const val = parseFloat(e.target.value);

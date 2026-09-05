@@ -32,7 +32,7 @@ export async function render(container) {
           <svg id="tts-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         </button>
       </div>
-      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:var(--space-sm) 0 var(--space-md)"></div>
+      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:var(--space-sm) 0 72px"></div>
       <div id="chat-toast" class="chat-toast"></div>
       <div class="chat-input-bar">
         <form id="chat-form" class="chat-form">
@@ -409,5 +409,8 @@ function removeTyping(container) {
 }
 
 function scrollToBottom(el) {
-  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  requestAnimationFrame(() => {
+    el.scrollTop = el.scrollHeight;
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
+  });
 }

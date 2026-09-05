@@ -2,9 +2,19 @@ import { open } from './db.js';
 import { register, init as initRouter } from './router.js';
 import { render as renderNavbar } from './components/navbar.js';
 
-const V = '?v=13';
+const V = '?v=14';
+
+function initTheme() {
+  try {
+    const saved = localStorage.getItem('focus_theme');
+    if (saved && saved !== 'auto') {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  } catch {}
+}
 
 async function boot() {
+  initTheme();
   await open();
 
   const { render: homeView } = await import('./views/home.js' + V);
