@@ -1,6 +1,6 @@
 import * as db from '../db.js';
 import * as modal from '../components/modal.js';
-import { on } from '../store.js';
+import { on, emit } from '../store.js';
 
 let unsub = null;
 
@@ -223,6 +223,7 @@ function renderChart(transactions, now) {
 async function deleteTransaction(id) {
   if (confirm('Eliminare questa transazione?')) {
     await db.del('transazioni', id);
+    emit('data-changed', { source: 'transazione' });
     loadData();
   }
 }
@@ -261,6 +262,7 @@ function openAddModal() {
       descrizione: data.descrizione || null,
       data: new Date().toISOString()
     });
+    emit('data-changed', { source: 'transazione' });
     loadData();
   });
 }

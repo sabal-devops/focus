@@ -78,7 +78,7 @@ export async function render(container) {
 
       <div class="section-title">Info</div>
       <div class="card">
-        <div class="item-subtitle">Focus v0.4.0</div>
+        <div class="item-subtitle">Focus v1.0.0</div>
         <div class="item-subtitle" style="margin-top:4px">Il tuo hub personale intelligente</div>
       </div>
     </div>
@@ -131,7 +131,7 @@ export async function render(container) {
     const result = await Notification.requestPermission();
     updateNotifUI();
     if (result === 'granted') {
-      const { checkAndNotify } = await import('../notifications.js');
+      const { checkAndNotify } = await import('../notifications.js?v=17');
       checkAndNotify();
     }
   });
