@@ -33,7 +33,7 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(var(--navbar-height) + var(--safe-bottom));
+  padding-bottom: calc(var(--navbar-height) + max(var(--safe-bottom), 12px));
 }
 
 .view-container {
