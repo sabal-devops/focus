@@ -171,6 +171,8 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
+let silenceTimer = null;
+
 function setupSpeechRecognition(input, form) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return;
@@ -178,38 +180,66 @@ function setupSpeechRecognition(input, form) {
   try {
     recognition = new SpeechRecognition();
     recognition.lang = 'it-IT';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      input.value = transcript;
+      let finalTranscript = '';
+      let interimTranscript = '';
 
-      if (event.results[event.results.length - 1].isFinal) {
-        stopRecording();
-        if (transcript.trim()) {
-          form.dispatchEvent(new Event('submit'));
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
+      }
+
+      input.value = finalTranscript + interimTranscript;
+
+      if (silenceTimer) clearTimeout(silenceTimer);
+
+      if (finalTranscript) {
+        silenceTimer = setTimeout(() => {
+          if (isRecording) {
+            try { recognition.stop(); } catch {}
+            stopRecording();
+            if (input.value.trim()) {
+              form.dispatchEvent(new Event('submit'));
+            }
+          }
+        }, 2000);
       }
     };
 
     recognition.onerror = (event) => {
-      stopRecording();
-      if (event.error === 'not-allowed') {
-        showToast('Permesso microfono negato. Vai in Impostazioni > Safari > Microfono');
-      } else if (event.error === 'no-speech') {
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+      if (event.error === 'no-speech') {
+        if (isRecording && input.value.trim()) {
+          try { recognition.stop(); } catch {}
+          stopRecording();
+          form.dispatchEvent(new Event('submit'));
+          return;
+        }
         showToast('Nessun audio rilevato, riprova');
+      } else if (event.error === 'not-allowed') {
+        showToast('Permesso microfono negato. Vai in Impostazioni > Safari > Microfono');
       } else if (event.error === 'network') {
         showToast('Errore di rete per il riconoscimento vocale');
-      } else {
+      } else if (event.error !== 'aborted') {
         showToast('Microfono non disponibile');
       }
+      stopRecording();
     };
 
-    recognition.onend = () => { stopRecording(); };
+    recognition.onend = () => {
+      if (isRecording && input.value.trim()) {
+        stopRecording();
+        form.dispatchEvent(new Event('submit'));
+      } else if (isRecording) {
+        stopRecording();
+      }
+    };
   } catch (e) {
     recognition = null;
   }
@@ -258,6 +288,7 @@ function startRecording() {
 
 function stopRecording() {
   isRecording = false;
+  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   const btn = document.getElementById('mic-btn');
   if (btn) {
     btn.classList.remove('recording');
