@@ -58,27 +58,60 @@ function normalize(text) {
     .trim();
 }
 
+function parseCurrencyValue(numStr, unit) {
+  const val = parseFloat(numStr.replace(',', '.'));
+  return /^cent/i.test(unit) ? val / 100 : val;
+}
+
 function extractAmount(text) {
+  const euroAndCentPattern = /(\d+[.,]?\d*)\s*(?:euro|€)\s+e\s+(\d+)\s*(?:centesimi|cent)/i;
+  const ecm = text.match(euroAndCentPattern);
+  if (ecm) return parseFloat(ecm[1].replace(',', '.')) + parseInt(ecm[2]) / 100;
+
   const patterns = [
-    /(\d+[.,]?\d*)\s*(?:euro|€)/i,
-    /(?:euro|€)\s*(\d+[.,]?\d*)/i,
+    /(\d+[.,]?\d*)\s*(euro|€|centesimi|cent)/i,
+    /(euro|€)\s*(\d+[.,]?\d*)/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
-    if (m) return parseFloat(m[1].replace(',', '.'));
+    if (m) {
+      if (p === patterns[1]) return parseFloat(m[2].replace(',', '.'));
+      return parseCurrencyValue(m[1], m[2]);
+    }
   }
-  const italianNumPattern = /(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(?:euro|€)/i;
+  const italianNumPattern = /(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(?:euro|€|centesimi|cent)/i;
   const im = text.match(italianNumPattern);
-  if (im) return italianToNumber(im[1]);
+  if (im) {
+    const val = italianToNumber(im[1]);
+    const isCent = /centesimi|cent/i.test(text.slice(im.index));
+    return isCent ? val / 100 : val;
+  }
   return null;
 }
 
 function extractAllAmounts(text) {
   let total = 0;
-  const digitMatches = text.matchAll(/(\d+[.,]?\d*)\s*(?:euro|€)/gi);
-  for (const m of digitMatches) total += parseFloat(m[1].replace(',', '.'));
-  const italianMatches = text.matchAll(/(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(?:euro|€)/gi);
-  for (const m of italianMatches) total += italianToNumber(m[1]) || 0;
+  const euroAndCent = text.matchAll(/(\d+[.,]?\d*)\s*(?:euro|€)\s+e\s+(\d+)\s*(?:centesimi|cent)/gi);
+  const ecPositions = new Set();
+  for (const m of euroAndCent) {
+    total += parseFloat(m[1].replace(',', '.')) + parseInt(m[2]) / 100;
+    ecPositions.add(m.index);
+  }
+  const digitMatches = text.matchAll(/(\d+[.,]?\d*)\s*(euro|€|centesimi|cent)/gi);
+  for (const m of digitMatches) {
+    if (ecPositions.has(m.index)) continue;
+    let alreadyCounted = false;
+    for (const pos of ecPositions) {
+      if (m.index >= pos && m.index < pos + 30) { alreadyCounted = true; break; }
+    }
+    if (alreadyCounted) continue;
+    total += parseCurrencyValue(m[1], m[2]);
+  }
+  const italianMatches = text.matchAll(/(?:^|\s)(un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|mille)\s+(euro|€|centesimi|cent)/gi);
+  for (const m of italianMatches) {
+    const val = italianToNumber(m[1]) || 0;
+    total += /^cent/i.test(m[2]) ? val / 100 : val;
+  }
   return total > 0 ? total : null;
 }
 
@@ -170,7 +203,7 @@ function extractSmartProducts(text) {
   const refined = [];
   for (const seg of segments) {
     // Split on pattern: "price euro/€ NEXT_ITEM" where next item starts with a number or known word
-    const parts = seg.split(/(?:\d+[.,]?\d*\s*(?:euro|€)|(?:euro|€)\s*\d+[.,]?\d*|(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(?:euro|€))\s*/gi);
+    const parts = seg.split(/(?:\d+[.,]?\d*\s*(?:euro|€|centesimi|cent)|(?:euro|€)\s*\d+[.,]?\d*|(?:un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)\s+(?:euro|€|centesimi|cent))\s*/gi);
     for (const p of parts) {
       const trimmed = p.replace(/\s+(?:a|per)\s*$/i, '').trim();
       if (trimmed.length > 1) refined.push(trimmed);
@@ -211,9 +244,9 @@ function looksLikePurchase(text) {
   if (!hasPrice) return false;
 
   const cleaned = norm
-    .replace(/\d+[.,]?\d*\s*(?:euro|€)/gi, '')
+    .replace(/\d+[.,]?\d*\s*(?:euro|€|centesimi|cent)/gi, '')
     .replace(/(?:euro|€)\s*\d+[.,]?\d*/gi, '')
-    .replace(/\b(?:un[oa]?|due|tre|quattro|cinque)\s+(?:euro|€)/gi, '')
+    .replace(/\b(?:un[oa]?|due|tre|quattro|cinque)\s+(?:euro|€|centesimi|cent)/gi, '')
     .replace(/\bho\s+(?:comprato|comperato|comparato|preso|acquistato|speso)\b/gi, '')
     .trim();
   const words = cleaned.split(/\s+/);
@@ -299,10 +332,11 @@ const PATTERNS = [
   },
   {
     name: 'prezzo_di_prodotto',
-    match: /^(\d+[.,]?\d*)\s*(?:euro|€)\s+di\s+(.+)$/i,
+    match: /^(\d+[.,]?\d*)\s*(euro|€|centesimi|cent)\s+di\s+(.+)$/i,
     async handler(m) {
-      const amount = parseFloat(m[1].replace(',', '.'));
-      const product = cleanProductName(m[2].trim());
+      let amount = parseFloat(m[1].replace(',', '.'));
+      if (/^cent/i.test(m[2])) amount /= 100;
+      const product = cleanProductName(m[3].trim());
       if (!isValidProductName(product)) return null;
 
       await db.add('spesa', { nome: product, quantita: null, unita: null, completato: true, dataAggiunta: new Date().toISOString(), dataCompletato: new Date().toISOString() });
@@ -361,11 +395,12 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_comprato_passivo',
-    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:comprat[oaie]|comperat[oaie]|comparat[oaie]|pres[oaie]|acquistat[oaie])\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(?:euro|€)?\s*$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:comprat[oaie]|comperat[oaie]|comparat[oaie]|pres[oaie]|acquistat[oaie])\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(euro|€|centesimi|cent)?\s*$/i,
     async handler(m) {
       const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
-      const amount = italianToNumber(m[3]);
+      let amount = italianToNumber(m[3]);
+      if (amount && m[4] && /^cent/i.test(m[4])) amount /= 100;
       const name = cleanProductName(product);
       if (!isValidProductName(name) || !amount) return null;
 
@@ -381,11 +416,12 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_con_prezzo',
-    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(\d+[.,]?\d*)\s*(?:euro|€)\s*$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(\d+[.,]?\d*)\s*(euro|€|centesimi|cent)\s*$/i,
     async handler(m) {
       const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
-      const amount = parseFloat(m[3].replace(',', '.'));
+      let amount = parseFloat(m[3].replace(',', '.'));
+      if (m[4] && /^cent/i.test(m[4])) amount /= 100;
       const name = cleanProductName(product);
       if (!isValidProductName(name)) return null;
       if (looksLikeEvent(name)) return null;
@@ -402,11 +438,12 @@ const PATTERNS = [
   },
   {
     name: 'prodotto_a_prezzo',
-    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(?:euro|€)\s*$/i,
+    match: /^(\d+|un[oa]?|due|tre|quattro|cinque|sei|sette|otto|nove|dieci)?\s*(.+?)\s+(?:a|per)\s+(\d+[.,]?\d*|un[oa]?|due|tre|quattro|cinque)\s*(euro|€|centesimi|cent)?\s*$/i,
     async handler(m) {
       const qty = m[1] ? italianToNumber(m[1]) : null;
       const product = m[2].trim();
-      const amount = italianToNumber(m[3]);
+      let amount = italianToNumber(m[3]);
+      if (amount && m[4] && /^cent/i.test(m[4])) amount /= 100;
       const name = cleanProductName(product);
       if (!isValidProductName(name) || !amount) return null;
       if (looksLikeEvent(name)) return null;

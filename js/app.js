@@ -2,7 +2,7 @@ import { open } from './db.js';
 import { register, init as initRouter } from './router.js';
 import { render as renderNavbar } from './components/navbar.js';
 
-const V = '?v=17';
+const V = '?v=18';
 
 function initTheme() {
   try {
